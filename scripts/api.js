@@ -119,6 +119,41 @@ export async function leaveClub(clubId) {
   if (error) throw error;
 }
 
+/**
+ * Transfer ownership of a club to another existing member.
+ * The DB trigger `sync_club_owner_member` will promote the new row to
+ * 'owner' and we manually demote the previous owner to 'member'.
+ */
+export async function transferClubOwnership({ clubId, newOwnerId }) {
+  const user = await getCurrentUser();
+  const { error } = await supabase
+    .from('clubs').update({ owner_id: newOwnerId })
+    .eq('id', clubId).eq('owner_id', user.id);
+  if (error) throw error;
+  await supabase.from('club_members')
+    .update({ role: 'member' })
+    .eq('club_id', clubId).eq('user_id', user.id);
+}
+
+/**
+ * Delete a club (owner only). Uses RPC with SECURITY DEFINER so Postgres
+ * can apply FK cascades (activities → registrations/reflections, runs unlink)
+ * without RLS blocking deletes on other users' rows.
+ */
+export async function deleteClub(clubId) {
+  const { error } = await supabase.rpc('delete_owned_club', { p_club_id: clubId });
+  if (error) throw error;
+}
+
+/** Owner sets a member's role (member / co_organizer). */
+export async function setMemberRole({ clubId, userId, role }) {
+  const { error } = await supabase
+    .from('club_members')
+    .update({ role })
+    .eq('club_id', clubId).eq('user_id', userId);
+  if (error) throw error;
+}
+
 export async function listClubMembers(clubId) {
   const { data, error } = await supabase
     .from('club_members')
@@ -163,6 +198,71 @@ export async function createActivity(payload) {
     .select('*').single();
   if (error) throw error;
   return data;
+}
+
+export async function uploadActivityAsset(file, { folder = 'misc' } = {}) {
+  const user = await getCurrentUser();
+  if (!user) throw new Error('Not signed in');
+  if (!file) throw new Error('No file selected');
+
+  const lowerName = (file.name || '').toLowerCase().trim();
+  const browserType = (file.type || '').trim();
+  // Browsers often report GPX / some images as application/octet-stream; the bucket
+  // rejects that MIME. Prefer extension when the browser type is missing or generic.
+  const byExtension =
+    /\.gpx$/.test(lowerName) ? 'application/gpx+xml' :
+    /\.geojson$/.test(lowerName) ? 'application/geo+json' :
+    /\.json$/.test(lowerName) ? 'application/json' :
+    /\.png$/.test(lowerName) ? 'image/png' :
+    /\.(jpg|jpeg)$/.test(lowerName) ? 'image/jpeg' :
+    /\.webp$/.test(lowerName) ? 'image/webp' :
+    /\.gif$/.test(lowerName) ? 'image/gif' :
+    null;
+  const genericBrowserType = !browserType ||
+    browserType === 'application/octet-stream' ||
+    browserType === 'text/plain';
+  const inferredType =
+    (byExtension && genericBrowserType) ? byExtension :
+    browserType || byExtension || 'application/octet-stream';
+
+  const safeName = (file.name || 'upload.bin')
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  const extMatch = lowerName.match(/(\.[a-z0-9]+)$/);
+  const normalizedName = (!safeName || safeName.startsWith('.'))
+    ? `upload${extMatch?.[1] || '.bin'}`
+    : safeName;
+  const path = `${user.id}/${folder}/${Date.now()}-${normalizedName}`;
+
+  // Storage validates the *Blob* Content-Type. Browsers often leave File.type as
+  // application/octet-stream for GPX; passing only `contentType` in options is not enough.
+  const uploadBody = new File([file], file.name || 'upload.bin', {
+    type: inferredType,
+    lastModified: file instanceof File ? file.lastModified : Date.now(),
+  });
+
+  const { error: uploadError } = await supabase
+    .storage
+    .from('activity-assets')
+    .upload(path, uploadBody, {
+      cacheControl: '3600',
+      upsert: false,
+      contentType: inferredType,
+    });
+  if (uploadError) throw uploadError;
+
+  const { data } = supabase
+    .storage
+    .from('activity-assets')
+    .getPublicUrl(path);
+
+  return {
+    path,
+    publicUrl: data.publicUrl,
+    name: file.name || 'upload.bin',
+    mimeType: inferredType,
+  };
 }
 
 export async function updateActivity(activityId, patch) {
@@ -213,12 +313,54 @@ export async function getMyRegistration(activityId) {
 export async function register({ activityId, groupName }) {
   const user = await getCurrentUser();
   if (!user) throw new Error('Not signed in');
+
+  // Capacity check — activity total_cap and per-group cap live in
+  // `activities.total_cap` and `activities.groups[].cap`. We read both and
+  // count non-cancelled registrations before insert so users see a friendly
+  // error instead of a generic RLS/constraint failure.
+  const { data: a } = await supabase
+    .from('activities')
+    .select('total_cap, groups')
+    .eq('id', activityId).maybeSingle();
+  if (a) {
+    const { data: existing } = await supabase
+      .from('registrations')
+      .select('group_name, status')
+      .eq('activity_id', activityId)
+      .neq('status', 'cancelled');
+    const totalCount = existing?.length ?? 0;
+    if (a.total_cap != null && totalCount >= a.total_cap) {
+      throw new Error('This activity is full.');
+    }
+    const cap = (Array.isArray(a.groups) ? a.groups : [])
+      .find(g => g?.name === groupName)?.cap;
+    if (cap != null) {
+      const groupCount = (existing ?? []).filter(r => r.group_name === groupName).length;
+      if (groupCount >= cap) throw new Error(`Group "${groupName}" is full.`);
+    }
+  }
+
   const { data, error } = await supabase
     .from('registrations')
     .insert({ activity_id: activityId, user_id: user.id, group_name: groupName, status: 'registered' })
     .select('*').single();
   if (error) throw error;
   return data;
+}
+
+/** Counts non-cancelled registrations overall and per group. */
+export async function getRegistrationCounts(activityId) {
+  const { data } = await supabase
+    .from('registrations')
+    .select('group_name, status')
+    .eq('activity_id', activityId)
+    .neq('status', 'cancelled');
+  const rows = data ?? [];
+  const byGroup = new Map();
+  for (const r of rows) {
+    byGroup.set(r.group_name || '', (byGroup.get(r.group_name || '') ?? 0) + 1);
+  }
+  return { total: rows.length, byGroup };
 }
 
 export async function cancelRegistration(activityId) {
@@ -230,22 +372,40 @@ export async function cancelRegistration(activityId) {
   if (error) throw error;
 }
 
-export async function checkIn({ activityId, method, lat, lng, accuracy }) {
+export async function checkIn({ activityId, method, lat, lng, accuracy, targetUserId = null }) {
   const user = await getCurrentUser();
+
+  // Late detection — check-in timestamp strictly after start_at gets
+  // status = 'late' (PRD §3.3 — "Late" tag on organizer reports).
+  let status = 'checked_in';
+  const { data: act } = await supabase
+    .from('activities')
+    .select('start_at')
+    .eq('id', activityId).maybeSingle();
+  if (act?.start_at && new Date() > new Date(act.start_at)) {
+    status = 'late';
+  }
+
   const { data, error } = await supabase
     .from('registrations')
     .update({
-      status: 'checked_in',
+      status,
       checkin_method: method,
       checkin_ts: new Date().toISOString(),
       checkin_lat: lat ?? null,
       checkin_lng: lng ?? null,
       checkin_accuracy: accuracy != null ? Math.round(accuracy) : null,
     })
-    .eq('activity_id', activityId).eq('user_id', user.id)
+    .eq('activity_id', activityId)
+    .eq('user_id', targetUserId || user.id)
     .select('*').single();
   if (error) throw error;
   return data;
+}
+
+/** Organizer manually marks a runner as checked in. */
+export async function manualCheckIn({ activityId, userId }) {
+  return checkIn({ activityId, method: 'fallback', targetUserId: userId });
 }
 
 export async function listActivityRegistrations(activityId) {
@@ -259,6 +419,19 @@ export async function listActivityRegistrations(activityId) {
 }
 
 /* ============================================================ Runs */
+
+/** Map of activity_id -> run count (for the current user). */
+export async function myRunsByActivity() {
+  const user = await getCurrentUser();
+  if (!user) return new Map();
+  const { data } = await supabase
+    .from('runs').select('activity_id')
+    .eq('user_id', user.id)
+    .not('activity_id', 'is', null);
+  const map = new Map();
+  for (const r of data ?? []) map.set(r.activity_id, (map.get(r.activity_id) ?? 0) + 1);
+  return map;
+}
 
 export async function listMyRuns({ limit = 50 } = {}) {
   const user = await getCurrentUser();

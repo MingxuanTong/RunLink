@@ -77,6 +77,12 @@ Plus two triggers worth knowing about:
 Verify it actually took effect: **Authentication → Policies** should now
 show a list of policies for every table.
 
+This step also prepares Supabase Storage for activity assets:
+
+- creates the public bucket `activity-assets`
+- allows authenticated users to upload cover images and route files
+- supports images plus `GPX` / `GeoJSON` route uploads up to `10 MB`
+
 ### Step 3 — Create a test user (required before seeding)
 
 The seed script needs at least one real `auth.users` row to act as the

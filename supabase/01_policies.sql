@@ -36,6 +36,26 @@ language sql stable security definer set search_path = public as $$
 $$;
 
 -- =====================================================================
+-- storage bucket
+-- =====================================================================
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'activity-assets',
+  'activity-assets',
+  true,
+  10485760,
+  array[
+    'image/png','image/jpeg','image/webp','image/gif',
+    'application/gpx+xml','application/geo+json','application/json','application/xml','text/xml',
+    'application/octet-stream','text/plain'
+  ]
+)
+on conflict (id) do update
+set public = excluded.public,
+    file_size_limit = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;
+
+-- =====================================================================
 -- profiles
 -- =====================================================================
 drop policy if exists profiles_read_all        on public.profiles;
@@ -256,6 +276,60 @@ create policy reflections_write_self on public.reflections
   for all to authenticated
   using (user_id = auth.uid())
   with check (user_id = auth.uid());
+
+-- =====================================================================
+-- delete club (owner only) — bypasses RLS for FK cascades
+-- Cascading deletes hit registrations / reflections / runs.activity_id
+-- updates that plain clients cannot pass under member-only RLS.
+-- =====================================================================
+create or replace function public.delete_owned_club(p_club_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'not authenticated';
+  end if;
+  if not exists (
+    select 1 from public.clubs c
+    where c.id = p_club_id and c.owner_id = auth.uid()
+  ) then
+    raise exception 'forbidden: only the club owner can delete this club';
+  end if;
+
+  delete from public.clubs where id = p_club_id;
+end;
+$$;
+
+revoke all on function public.delete_owned_club(uuid) from public;
+grant execute on function public.delete_owned_club(uuid) to authenticated;
+
+-- =====================================================================
+-- storage.objects · activity-assets bucket
+-- =====================================================================
+drop policy if exists activity_assets_read   on storage.objects;
+drop policy if exists activity_assets_insert on storage.objects;
+drop policy if exists activity_assets_update on storage.objects;
+drop policy if exists activity_assets_delete on storage.objects;
+
+create policy activity_assets_read on storage.objects
+  for select to authenticated
+  using (bucket_id = 'activity-assets');
+
+create policy activity_assets_insert on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'activity-assets');
+
+create policy activity_assets_update on storage.objects
+  for update to authenticated
+  using (bucket_id = 'activity-assets')
+  with check (bucket_id = 'activity-assets');
+
+create policy activity_assets_delete on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'activity-assets');
 
 -- =====================================================================
 -- Done. Next: run 02_seed.sql (requires at least one signed-up user)

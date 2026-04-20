@@ -67,10 +67,17 @@ export function navigate(hash) {
 
 export function setHeader({ title = 'RunLink', backTo = null } = {}) {
   const t = $('#app-header-title'); if (t) t.textContent = title;
+  const dt = $('#desktop-page-title');
+  if (dt) dt.textContent = title;
   const b = $('#back-btn');
   if (b) {
     b.hidden = !backTo;
     b.onclick = () => navigate(backTo);
+  }
+  const db = $('#desktop-back-btn');
+  if (db) {
+    db.hidden = !backTo;
+    db.onclick = () => { if (backTo) navigate(backTo); };
   }
 }
 
@@ -154,6 +161,12 @@ async function handleRoute() {
     container.innerHTML = `<div class="empty">Unknown route</div>`;
     return;
   }
+  // Opt-in full-bleed layout for the Running view (dark map takeover).
+  document.body.classList.toggle('run-fullscreen', match.view === 'running');
+  // Hide the redundant mobile app-header on profile/edit-profile (hero banner acts as header).
+  document.body.classList.toggle('profile-fullscreen',
+    match.view === 'profile' || match.view === 'editProfile');
+
   try {
     await fn(container, match.params || {});
   } catch (err) {

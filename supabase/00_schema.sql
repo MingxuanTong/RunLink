@@ -134,6 +134,10 @@ create table if not exists public.activities (
   meetup_name           text,
   meetup_lat            double precision,
   meetup_lng            double precision,
+  route_file_url        text,
+  route_file_name       text,
+  route_file_kind       text,
+  route_geojson         jsonb,
   geofence_m            integer not null default 50,
   total_cap             integer,                        -- null = unlimited
   groups                jsonb not null default '[]'::jsonb,

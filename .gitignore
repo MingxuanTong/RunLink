@@ -1,0 +1,15 @@
+# Local credentials & secrets — never commit
+supabase/credentials.local.md
+.env
+.env.local
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Node (if we add a bundler later)
+node_modules/
+dist/
+.cache/

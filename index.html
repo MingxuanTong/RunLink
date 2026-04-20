@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0B0F1A" />
+  <title>RunLink · Running Club Companion</title>
+  <meta name="description" content="RunLink — a mobile-first web app that helps running clubs publish activities, verify attendance with a 50 m map check-in, and celebrate progress together." />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700&family=Barlow:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+  <link rel="stylesheet" href="styles/app.css" />
+
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23F97316'/><text x='50' y='68' text-anchor='middle' font-family='system-ui' font-size='60' font-weight='700' fill='white'>R</text></svg>" />
+</head>
+<body>
+  <a href="#/discover" class="skip-link">Skip to main content</a>
+
+  <div id="app" class="app" hidden>
+    <!-- Left side-nav (desktop) -->
+    <aside id="side-nav" class="side-nav" aria-label="Primary navigation">
+      <div class="brand">
+        <div class="logo" aria-hidden="true"><i class="fa-solid fa-person-running"></i></div>
+        <div>
+          <div class="brand-name">RunLink</div>
+          <div class="brand-tag">Running Club Companion</div>
+        </div>
+      </div>
+      <nav class="nav-list"></nav>
+      <div class="nav-footer">
+        <button id="nav-logout" class="ghost-btn" type="button">
+          <i class="fa-solid fa-right-from-bracket"></i> Log out
+        </button>
+      </div>
+    </aside>
+
+    <!-- Top bar (mobile) -->
+    <header id="app-header" class="app-header" aria-label="Page header">
+      <button id="back-btn" class="icon-btn back-btn" type="button" aria-label="Back" hidden>
+        <i class="fa-solid fa-chevron-left"></i>
+      </button>
+      <div class="app-header-title" id="app-header-title">RunLink</div>
+      <button id="header-action" class="icon-btn" type="button" aria-label="Action" hidden></button>
+    </header>
+
+    <!-- Main view -->
+    <main id="view" class="view" aria-live="polite" tabindex="-1"></main>
+
+    <!-- Bottom tabs (mobile) -->
+    <nav id="bottom-nav" class="bottom-nav" aria-label="Primary tabs"></nav>
+  </div>
+
+  <!-- Auth shell (no side-nav / bottom-nav while logged out) -->
+  <div id="auth-shell" class="auth-shell" hidden>
+    <main id="auth-view" class="auth-view" aria-live="polite"></main>
+  </div>
+
+  <!-- Boot splash -->
+  <div id="boot" class="boot">
+    <div class="boot-logo"><i class="fa-solid fa-person-running"></i></div>
+    <div class="boot-title">RunLink</div>
+    <div class="spinner" aria-hidden="true"></div>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toast-root" class="toast-root" role="status" aria-live="polite"></div>
+
+  <!-- Modal root -->
+  <div id="modal-root" class="modal-root" hidden></div>
+
+  <script type="module" src="scripts/app.js"></script>
+
+  <!-- Boot watchdog: if the splash hasn't been removed after 15 s,
+       show an inline diagnostic so the user can see CDN / network errors. -->
+  <script>
+    setTimeout(() => {
+      const boot = document.getElementById('boot');
+      if (!boot || boot.classList.contains('hidden')) return;
+      boot.innerHTML = `
+        <div style="max-width:420px;padding:24px;text-align:center;color:#E2E8F0;font-family:system-ui">
+          <div style="font-size:40px;margin-bottom:8px">⏱️</div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:26px;font-weight:700;color:#fff;margin-bottom:6px">Still loading…</div>
+          <p style="color:#94A3B8;font-size:13.5px;line-height:1.6;margin:0 0 14px">
+            The app didn't finish bootstrapping within 15 s. This is usually a blocked or slow CDN
+            (Supabase client / Google Fonts / Font Awesome). Open the browser's DevTools Console /
+            Network tab to see which request is stuck.
+          </p>
+          <button onclick="location.reload()"
+            style="padding:10px 16px;border:0;border-radius:10px;background:#F97316;color:#fff;font-weight:700;cursor:pointer">
+            Reload
+          </button>
+        </div>`;
+    }, 15000);
+  </script>
+</body>
+</html>

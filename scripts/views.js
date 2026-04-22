@@ -25,6 +25,7 @@ const CHECK_IN_RADIUS_M = 50;
 /** PRD §3.4a — fixed 7-emoji reaction preset. */
 const EMOJI_PRESET = ['💪', '🔥', '😎', '😅', '🎉', '👍', '❤️'];
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+const DEFAULT_PROFILE_COVER_URL = 'https://images.unsplash.com/photo-1502810190503-8303352d0dd1?w=900&h=500&fit=crop';
 
 function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -1254,7 +1255,10 @@ export async function renderRunning(container) {
     .filter(r => (r.status === 'checked_in' || r.status === 'late') && r.activity)
     .map(r => r.activity);
 
-  const picked = window.__runLinkedActivity ?? (pickable[0] || null);
+  const hasManualLinkedActivity = Object.prototype.hasOwnProperty.call(window, '__runLinkedActivity');
+  const picked = hasManualLinkedActivity
+    ? window.__runLinkedActivity
+    : (pickable[0] || null);
   return renderRunPreview(container, { picked, pickable });
 }
 
@@ -1271,7 +1275,7 @@ async function renderRunPreview(container, { picked, pickable }) {
 
       <!-- Top bar -->
       <div class="run-topbar">
-        <h1 class="run-title">Running</h1>
+        <div aria-hidden="true"></div>
         <button class="route-square ${activity ? 'has-route' : ''}"
                 id="pick-route"
                 title="Activity route" aria-label="Activity route">
@@ -1406,7 +1410,7 @@ async function renderRunPreview(container, { picked, pickable }) {
       navigator.geolocation.getCurrentPosition(
         () => { gpsEl.textContent = 'GPS ready'; },
         () => { gpsEl.textContent = 'GPS waiting…'; },
-        { enableHighAccuracy: false, timeout: 4000 },
+        { enableHighAccuracy: true, timeout: 4000, maximumAge: 0 },
       );
     }
   }
@@ -1535,6 +1539,15 @@ async function startRun(container, activity) {
       if (runState.duration_s >= 12 && runState.recorder.getPoints().length === 0) {
         switchToMock('No GPS fix after 12 s');
       }
+      // GPS quality hint
+      const gpsEl = document.getElementById('gps-quality');
+      if (gpsEl && runState.recorder.getFilterStats) {
+        const { accepted, rejected } = runState.recorder.getFilterStats();
+        const ratio = accepted + rejected > 0 ? accepted / (accepted + rejected) : 1;
+        if (ratio >= 0.7) gpsEl.textContent = 'GPS: good';
+        else if (ratio >= 0.3) gpsEl.textContent = 'GPS: fair';
+        else gpsEl.textContent = 'GPS: poor';
+      }
     }
 
     const tEl = $('#run-timer');    if (tEl) tEl.textContent = fmtDuration(runState.duration_s);
@@ -1565,9 +1578,9 @@ function renderRunRecording(container) {
       <!-- Top bar: Running + REC pill + locked route square -->
       <div class="run-topbar">
         <h1 class="run-title">
-          Running
           <span class="rec-dot"><span class="dot"></span> Recording</span>
           <span id="sim-badge-slot"></span>
+          <span id="gps-quality" style="font-size:11px;color:rgba(255,255,255,0.6);margin-left:8px;"></span>
         </h1>
         <button class="route-square locked" disabled
                 aria-label="Activity route (locked during run)">
@@ -2020,12 +2033,13 @@ export async function renderProfile(container) {
   const upcomingCount = (myRegs || []).length;
   const achievements = computeAchievements(runs);
   const unlockedCount = achievements.filter(a => a.unlocked).length;
+  const profileCoverUrl = profile?.cover_url || DEFAULT_PROFILE_COVER_URL;
 
   container.innerHTML = `
     <!-- Dark hero banner -->
-    <section class="profile-hero">
+    <section class="profile-hero" style="--profile-cover-image:url('${esc(profileCoverUrl)}')">
       <div class="hero-top">
-        <h1 class="hero-title">Profile</h1>
+        <div aria-hidden="true"></div>
         <div class="hero-actions">
           <button class="icon-btn" id="p-qr"       aria-label="My QR code"><i class="fa-solid fa-qrcode"></i></button>
           <button class="icon-btn" id="p-settings" aria-label="Settings"><i class="fa-solid fa-gear"></i></button>
@@ -2196,14 +2210,16 @@ export async function renderEditProfile(container) {
   setHeader({ title: 'Edit profile', backTo: '#/profile' });
   const p = await api.getMyProfile();
   const user = await api.getCurrentUser();
+  const editCoverUrl = p?.cover_url || DEFAULT_PROFILE_COVER_URL;
 
   container.innerHTML = `
     <!-- Cover banner + floating avatar -->
-    <div class="edit-banner">
+    <div class="edit-banner" id="edit-banner" style="background-image:url('${esc(editCoverUrl)}')">
       <button class="change-cover" type="button" id="change-cover">
         <i class="fa-solid fa-camera"></i> Change cover
       </button>
     </div>
+    <input id="cover-file-input" name="cover_file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none" />
 
     <div class="av-holder">
       ${avatarHtml(p, { size: 'lg' })}
@@ -2211,6 +2227,7 @@ export async function renderEditProfile(container) {
         <i class="fa-solid fa-pen"></i>
       </button>
     </div>
+    <input id="avatar-file-input" name="avatar_file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none" />
 
     <form id="edit-form">
       <div class="section-head">Profile</div>
@@ -2219,11 +2236,6 @@ export async function renderEditProfile(container) {
           <span class="label">Name</span>
           <input name="display_name" required minlength="2" maxlength="40"
                  value="${esc(p?.display_name || '')}" placeholder="Your display name" />
-        </div>
-        <div class="field-row">
-          <span class="label">Avatar URL</span>
-          <input name="avatar_url" type="url"
-                 value="${esc(p?.avatar_url || '')}" placeholder="https://…" />
         </div>
         <div class="field-row vertical">
           <span class="label">Bio</span>
@@ -2254,26 +2266,77 @@ export async function renderEditProfile(container) {
   `;
 
   $('#change-cover', container).addEventListener('click', () =>
-    toast('Custom covers are coming soon', { kind: 'info' })
+    $('#cover-file-input', container)?.click()
   );
+  const editBanner = $('#edit-banner', container);
+  const coverFileInput = $('#cover-file-input', container);
+  const avatarFileInput = $('#avatar-file-input', container);
+  let avatarUrl = p?.avatar_url || null;
+  let coverUrl = p?.cover_url || null;
+  let coverPreviewUrl = null;
+
+  coverFileInput?.addEventListener('change', () => {
+    const file = coverFileInput.files?.[0];
+    if (!file) return;
+    if (file.size > MAX_UPLOAD_BYTES) {
+      toast(`Cover image must be <= ${Math.round(MAX_UPLOAD_BYTES / (1024 * 1024))} MB`, { kind: 'warn' });
+      coverFileInput.value = '';
+      return;
+    }
+    if (coverPreviewUrl) URL.revokeObjectURL(coverPreviewUrl);
+    coverPreviewUrl = URL.createObjectURL(file);
+    editBanner.style.backgroundImage = `url('${coverPreviewUrl}')`;
+    const mb = (file.size / (1024 * 1024)).toFixed(2);
+    toast(`Selected cover: ${file.name} (${mb} MB)`, { kind: 'info' });
+  });
+
+  avatarFileInput?.addEventListener('change', () => {
+    const file = avatarFileInput.files?.[0];
+    if (!file) return;
+    const mb = (file.size / (1024 * 1024)).toFixed(2);
+    toast(`Selected avatar: ${file.name} (${mb} MB)`, { kind: 'info' });
+  });
+
   $('#pick-avatar', container).addEventListener('click', () => {
-    const input = container.querySelector('input[name="avatar_url"]');
-    input?.focus();
-    input?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    avatarFileInput?.click();
   });
 
   $('#edit-form', container).addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const fd = new FormData(ev.target);
+    const submitBtn = ev.target.querySelector('button[type="submit"]');
     try {
+      if (submitBtn) submitBtn.disabled = true;
+      const avatarFile = avatarFileInput?.files?.[0] || null;
+      if (avatarFile && avatarFile.size > MAX_UPLOAD_BYTES) {
+        throw new Error(`Avatar image must be <= ${Math.round(MAX_UPLOAD_BYTES / (1024 * 1024))} MB`);
+      }
+      const coverFile = coverFileInput?.files?.[0] || null;
+      const avatarUpload = avatarFile
+        ? await api.uploadActivityAsset(avatarFile, { folder: 'profile-avatars' })
+        : null;
+      const coverUpload = coverFile
+        ? await api.uploadActivityAsset(coverFile, { folder: 'profile-covers' })
+        : null;
+      avatarUrl = avatarUpload?.publicUrl || avatarUrl;
+      coverUrl = coverUpload?.publicUrl || coverUrl;
       await api.updateMyProfile({
         display_name: fd.get('display_name').toString().trim(),
-        avatar_url: fd.get('avatar_url').toString().trim() || null,
+        avatar_url: avatarUrl,
+        cover_url: coverUrl,
         bio: fd.get('bio').toString().trim() || null,
       });
       toast('Profile updated', { kind: 'success' });
       navigate('#/profile');
-    } catch (err) { toast(err.message, { kind: 'error' }); }
+    } catch (err) {
+      toast(err.message, { kind: 'error' });
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
+      if (coverPreviewUrl) {
+        URL.revokeObjectURL(coverPreviewUrl);
+        coverPreviewUrl = null;
+      }
+    }
   });
 }
 

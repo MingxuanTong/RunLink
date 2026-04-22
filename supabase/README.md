@@ -1,6 +1,6 @@
 # RunLink · Supabase setup
 
-This folder contains the three SQL scripts you need to bootstrap the
+This folder contains the SQL scripts you need to bootstrap the
 RunLink backend on Supabase. Everything here is **free-tier only**.
 
 ```
@@ -8,6 +8,7 @@ supabase/
 ├── 00_schema.sql      # tables, triggers, helper view
 ├── 01_policies.sql    # Row Level Security (RLS) policies
 ├── 02_seed.sql        # demo clubs, activities, runs
+├── 03_profile_cover.sql # migration: add profiles.cover_url
 └── README.md          # you are here
 ```
 
@@ -103,6 +104,13 @@ demo club owner.
 2. Expected: a `NOTICE` line like
    `Seed complete. Demo owner: 1a2b...  Clubs: Shanghai=..., Beijing=...`
 
+### Step 5 — Apply latest migrations (if upgrading an existing project)
+
+If your project was created before profile cover uploads were added:
+
+1. New query → paste **all of `03_profile_cover.sql`** → Run.
+2. Expected result: `Success. No rows returned.`
+
 ### Sanity check
 
 Run each of these in the SQL Editor (or use the **Table Editor**):
@@ -148,6 +156,8 @@ monthly mileage leaderboard) + Realtime "just registered" toast.
 - **`02_seed.sql`** deletes its own previous rows (anything whose name/
   title starts with `DEMO · `) before inserting fresh — safe to re-run
   as long as you haven't renamed the demo rows.
+- **`03_profile_cover.sql`** is additive (`add column if not exists`) —
+  safe to re-run.
 
 To nuke **everything** and start over:
 
@@ -163,7 +173,7 @@ drop function if exists public.is_club_member(uuid) cascade;
 drop view if exists public.v_monthly_mileage;
 ```
 
-Then re-run `00 → 01 → 02` in order.
+Then re-run `00 → 01 → 02`, and `03` if needed.
 
 ---
 

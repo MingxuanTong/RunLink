@@ -978,18 +978,18 @@ body.profile-fullscreen .edit-banner  { margin-top: 0; }
 .profile-hero {
   position: relative;
   margin: -10px -16px 0;   /* escape .view padding on mobile */
-  padding: 14px 16px 40px; /* room for stats-strip overlap */
+  padding: 12px 16px 64px; /* room for larger stats-strip overlap */
   color: #fff;
   background:
     radial-gradient(400px 200px at 80% 20%, rgba(249,115,22,0.45), transparent 60%),
     linear-gradient(135deg, #0F172A 0%, #1E293B 55%, #F97316 170%);
   overflow: hidden;
-  border-bottom-left-radius: 26px;
-  border-bottom-right-radius: 26px;
+  border-bottom-left-radius: 34px;
+  border-bottom-right-radius: 34px;
 }
 .profile-hero::before {
   content: ''; position: absolute; inset: 0;
-  background: url('https://images.unsplash.com/photo-1502810190503-8303352d0dd1?w=900&h=500&fit=crop') center/cover;
+  background: var(--profile-cover-image, url('https://images.unsplash.com/photo-1502810190503-8303352d0dd1?w=900&h=500&fit=crop')) center/cover;
   mix-blend-mode: overlay; opacity: 0.35;
   pointer-events: none;
 }
@@ -1016,25 +1016,26 @@ body.profile-fullscreen .edit-banner  { margin-top: 0; }
 .profile-hero .hero-actions .icon-btn:hover { background: rgba(255,255,255,0.22); }
 
 .profile-identity {
-  display: flex; align-items: center; gap: 14px;
-  padding-top: 14px;
+  display: flex; align-items: flex-start; gap: 16px;
+  padding-top: 16px;
 }
 .profile-identity .av-wrap {
-  position: relative; width: 84px; height: 84px; border-radius: 42px;
+  position: relative; width: 96px; height: 96px; border-radius: 48px;
   padding: 3px;
+  margin-top: 2px;
   background: linear-gradient(135deg, #F97316, #22C55E);
   flex-shrink: 0;
 }
 .profile-identity .av-wrap > .avatar,
 .profile-identity .av-wrap > img {
-  width: 100%; height: 100%; border-radius: 39px;
+  width: 100%; height: 100%; border-radius: 45px;
   border: 3px solid #0F172A; object-fit: cover;
   background: rgba(255,255,255,0.15); color: #fff;
-  font-size: 26px;
+  font-size: 30px;
 }
 .profile-identity .av-wrap .edit {
-  position: absolute; bottom: -4px; right: -4px;
-  width: 28px; height: 28px; border-radius: 14px;
+  position: absolute; bottom: -3px; right: -3px;
+  width: 30px; height: 30px; border-radius: 15px;
   background: var(--brand); color: #fff;
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 12px; border: 2px solid #0F172A;
@@ -1062,28 +1063,30 @@ body.profile-fullscreen .edit-banner  { margin-top: 0; }
 
 /* Stats strip — card that overlaps the hero's bottom. */
 .profile-stats-strip {
-  margin: -24px 0 0;
-  padding: 16px;
+  margin: -34px 0 0;
+  padding: 18px 12px;
   background: #fff;
-  border-radius: var(--r-lg);
+  border-radius: 28px;
   box-shadow: var(--shadow-md);
   display: grid; grid-template-columns: repeat(3, 1fr);
   position: relative; z-index: 3;
+  border: 1px solid var(--ink-100);
 }
 .profile-stats-strip .stat-tile {
   text-align: center;
   border-right: 1px solid var(--ink-100);
+  padding: 2px 4px;
 }
 .profile-stats-strip .stat-tile:last-child { border-right: 0; }
 .profile-stats-strip .v {
   font-family: var(--font-display); font-weight: 700;
-  font-size: 28px; color: var(--ink-900); line-height: 1;
+  font-size: 26px; color: var(--ink-900); line-height: 1.02;
   letter-spacing: -0.02em; font-variant-numeric: tabular-nums;
 }
 .profile-stats-strip .l {
-  font-size: 10px; color: var(--ink-500);
+  font-size: 11px; color: var(--ink-500);
   letter-spacing: 0.08em; text-transform: uppercase;
-  margin-top: 6px; font-weight: 700;
+  margin-top: 8px; font-weight: 700;
 }
 
 /* Quick action tiles */
@@ -1302,9 +1305,9 @@ body.profile-fullscreen .edit-banner  { margin-top: 0; }
 /* Small screens */
 @media (max-width: 359px) {
   .tile-grid { grid-template-columns: repeat(2, 1fr); }
-  .profile-identity .av-wrap { width: 72px; height: 72px; border-radius: 36px; }
+  .profile-identity .av-wrap { width: 80px; height: 80px; border-radius: 40px; }
   .profile-identity .av-wrap > .avatar,
-  .profile-identity .av-wrap > img { border-radius: 33px; }
+  .profile-identity .av-wrap > img { border-radius: 37px; }
   .profile-hero .hero-title { font-size: 22px; }
 }
 

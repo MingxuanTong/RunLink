@@ -212,8 +212,16 @@ export async function runRecorder(el, { meetup = null, radius = 50, theme = 'dar
   const points = []; // {lat, lng, ts, accuracy}
   let watchId = null;
   let firstFix = true;
+  let rejectedCount = 0;
 
-  function push(lat, lng, accuracy) {
+  // GPS filter constants
+  const MAX_SPEED_MPS = 11;   // ~40 km/h — anything faster is a spike
+  const MIN_DISTANCE_M = 2;   // ignore drift < 2 m
+  const MAX_ACCURACY_M = 50;  // reject poor fixes
+  const SMOOTH_ALPHA = 0.6;   // EMA weight for new fix (higher = trust new fix more)
+  let smoothLat = null, smoothLng = null;
+
+  function commitPoint(lat, lng, accuracy) {
     const latlng = L.latLng(lat, lng);
     points.push({ lat, lng, ts: Date.now(), accuracy });
     trail.addLatLng(latlng);
@@ -224,6 +232,35 @@ export async function runRecorder(el, { meetup = null, radius = 50, theme = 'dar
     } else {
       map.panTo(latlng, { animate: true, duration: 0.5 });
     }
+  }
+
+  function push(lat, lng, accuracy) {
+    // 1. Reject poor-accuracy fixes
+    if (accuracy > MAX_ACCURACY_M) { rejectedCount++; return; }
+
+    // 2. First fix — accept and initialize smoothing
+    if (points.length === 0) {
+      smoothLat = lat; smoothLng = lng;
+      commitPoint(lat, lng, accuracy);
+      return;
+    }
+
+    // 3. Spike detection — if implied speed > threshold, skip
+    const last = points[points.length - 1];
+    const dt = (Date.now() - last.ts) / 1000;
+    const rawDist = haversineMeters(last.lat, last.lng, lat, lng);
+    if (dt > 0 && rawDist / dt > MAX_SPEED_MPS) { rejectedCount++; return; }
+
+    // 4. Smooth with EMA weighted by accuracy (better accuracy → more weight)
+    const alpha = Math.min(1, (MAX_ACCURACY_M / accuracy) * SMOOTH_ALPHA);
+    smoothLat = smoothLat * (1 - alpha) + lat * alpha;
+    smoothLng = smoothLng * (1 - alpha) + lng * alpha;
+
+    // 5. Stationary detection — ignore drift
+    const smoothDist = haversineMeters(last.lat, last.lng, smoothLat, smoothLng);
+    if (smoothDist < MIN_DISTANCE_M) { rejectedCount++; return; }
+
+    commitPoint(smoothLat, smoothLng, accuracy);
   }
 
   return {
@@ -244,7 +281,7 @@ export async function runRecorder(el, { meetup = null, radius = 50, theme = 'dar
       watchId = navigator.geolocation.watchPosition(
         (pos) => push(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy),
         (err) => onError?.(err),
-        { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 },
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 },
       );
     },
 
@@ -254,6 +291,10 @@ export async function runRecorder(el, { meetup = null, radius = 50, theme = 'dar
     },
 
     getPoints() { return points.slice(); },
+
+    getFilterStats() {
+      return { accepted: points.length, rejected: rejectedCount };
+    },
 
     getDistanceMeters() {
       let d = 0;
@@ -279,7 +320,7 @@ export async function runRecorder(el, { meetup = null, radius = 50, theme = 'dar
       const jitterLng = (Math.random() - 0.5) * 0.00004;
       const nextLat = base.lat + 0.00003 + jitterLat;
       const nextLng = base.lng + 0.00003 + jitterLng;
-      push(nextLat, nextLng, 999);
+      commitPoint(nextLat, nextLng, 999);
     },
   };
 }

@@ -293,7 +293,24 @@ export async function renderDiscover(container) {
   setHeader({ title: 'Discover' });
   const user = await api.getCurrentUser();
   const myClubIds = new Set(await supabaseHelperMemberships(user.id));
-  const upcoming = await api.listActivities({ timeframe: 'upcoming', status: 'published' });
+  const upcomingRaw = await api.listActivities({ timeframe: 'upcoming', status: 'published' });
+  const norm = (v) => String(v || '').trim().toLowerCase();
+  const activityKey = (a) => [
+    norm(a?.club_id),
+    norm(a?.club?.name),
+    norm(a?.title),
+    norm(a?.start_at),
+    norm(a?.meetup_name),
+    norm(a?.meetup_lat),
+    norm(a?.meetup_lng),
+  ].join('||');
+  const seenActivityKeys = new Set();
+  const upcoming = upcomingRaw.filter((a) => {
+    const key = activityKey(a);
+    if (seenActivityKeys.has(key)) return false;
+    seenActivityKeys.add(key);
+    return true;
+  });
 
   container.innerHTML = `
     <div class="search-pill" role="search">
@@ -328,8 +345,10 @@ export async function renderDiscover(container) {
   const upBox = $('#upcoming', container);
   const searchEl = $('#disc-search', container);
   const featured = upcoming[0] || null;
-  const recs = upcoming.slice(1, 6);
-  const pinnedIds = new Set([featured?.id, ...recs.map(a => a.id)].filter(Boolean));
+  const featuredKey = featured ? activityKey(featured) : null;
+  const recsPool = featuredKey ? upcoming.filter(a => activityKey(a) !== featuredKey) : [...upcoming];
+  const recs = recsPool.slice(0, 5);
+  const pinnedKeys = new Set([featured, ...recs].filter(Boolean).map(a => activityKey(a)));
   /** @type {'for-you'|'nearby'|'this-week'|'beginner'|'trail'} */
   let discoverMode = 'for-you';
   /** @type {typeof upcoming | null} */
@@ -364,7 +383,7 @@ export async function renderDiscover(container) {
     }
     let rows = rowsForDiscoverMode(upcoming);
     // Avoid showing the same activity in top sections and the grid.
-    rows = rows.filter(a => !pinnedIds.has(a.id));
+    rows = rows.filter(a => !pinnedKeys.has(activityKey(a)));
     const q = (searchEl?.value || '').trim().toLowerCase();
     if (q) {
       rows = rows.filter(a =>
@@ -1244,6 +1263,7 @@ function myActivityCard(r, runsByActivity) {
 
 // Module-level state so pressing Pause doesn't lose the recorder.
 let runState = null;
+let _activeClubId = null;
 
 export async function renderRunning(container) {
   setHeader({ title: 'Running' });
@@ -1255,10 +1275,7 @@ export async function renderRunning(container) {
     .filter(r => (r.status === 'checked_in' || r.status === 'late') && r.activity)
     .map(r => r.activity);
 
-  const hasManualLinkedActivity = Object.prototype.hasOwnProperty.call(window, '__runLinkedActivity');
-  const picked = hasManualLinkedActivity
-    ? window.__runLinkedActivity
-    : (pickable[0] || null);
+  const picked = window.__runLinkedActivity ?? (pickable[0] || null);
   return renderRunPreview(container, { picked, pickable });
 }
 
@@ -1410,7 +1427,7 @@ async function renderRunPreview(container, { picked, pickable }) {
       navigator.geolocation.getCurrentPosition(
         () => { gpsEl.textContent = 'GPS ready'; },
         () => { gpsEl.textContent = 'GPS waiting…'; },
-        { enableHighAccuracy: true, timeout: 4000, maximumAge: 0 },
+        { enableHighAccuracy: false, timeout: 4000 },
       );
     }
   }
@@ -1539,15 +1556,6 @@ async function startRun(container, activity) {
       if (runState.duration_s >= 12 && runState.recorder.getPoints().length === 0) {
         switchToMock('No GPS fix after 12 s');
       }
-      // GPS quality hint
-      const gpsEl = document.getElementById('gps-quality');
-      if (gpsEl && runState.recorder.getFilterStats) {
-        const { accepted, rejected } = runState.recorder.getFilterStats();
-        const ratio = accepted + rejected > 0 ? accepted / (accepted + rejected) : 1;
-        if (ratio >= 0.7) gpsEl.textContent = 'GPS: good';
-        else if (ratio >= 0.3) gpsEl.textContent = 'GPS: fair';
-        else gpsEl.textContent = 'GPS: poor';
-      }
     }
 
     const tEl = $('#run-timer');    if (tEl) tEl.textContent = fmtDuration(runState.duration_s);
@@ -1580,7 +1588,6 @@ function renderRunRecording(container) {
         <h1 class="run-title">
           <span class="rec-dot"><span class="dot"></span> Recording</span>
           <span id="sim-badge-slot"></span>
-          <span id="gps-quality" style="font-size:11px;color:rgba(255,255,255,0.6);margin-left:8px;"></span>
         </h1>
         <button class="route-square locked" disabled
                 aria-label="Activity route (locked during run)">
@@ -1709,6 +1716,16 @@ function renderRunRecording(container) {
 
 export async function renderCommunity(container) {
   setHeader({ title: 'Community' });
+  const norm = (v) => String(v || '').trim().toLowerCase();
+  const activityKey = (a) => [
+    norm(a?.club_id),
+    norm(a?.club?.name),
+    norm(a?.title),
+    norm(a?.start_at),
+    norm(a?.meetup_name),
+    norm(a?.meetup_lat),
+    norm(a?.meetup_lng),
+  ].join('||');
   const clubs = await api.listClubs({ mineOnly: true });
   const user = await api.getCurrentUser();
 
@@ -1728,7 +1745,7 @@ export async function renderCommunity(container) {
     return;
   }
 
-  const active = clubs[0];
+  const active = clubs.find(c => c.id === _activeClubId) || clubs[0];
   const isOwner = active.owner_id === user?.id;
   container.innerHTML = `
     <div class="club-header">
@@ -1737,7 +1754,7 @@ export async function renderCommunity(container) {
         <div class="name">${esc(active.name)}</div>
         <div class="sub">${esc(active.description || '')}</div>
       </div>
-      ${clubs.length > 1 ? `<button class="icon-btn neutral" data-nav="#/clubs" title="Switch club"><i class="fa-solid fa-repeat"></i></button>` : ''}
+      <button class="icon-btn neutral" data-nav="#/clubs" title="Switch club"><i class="fa-solid fa-repeat"></i></button>
       <button class="icon-btn neutral" id="club-overflow" title="Club options"><i class="fa-solid fa-ellipsis"></i></button>
     </div>
 
@@ -1760,7 +1777,14 @@ export async function renderCommunity(container) {
   // Activities
   const actBox = $('#club-activities', container);
   showLoading(actBox, 2);
-  const acts = await api.listActivities({ clubId: active.id, timeframe: 'upcoming' });
+  const actsRaw = await api.listActivities({ clubId: active.id, timeframe: 'upcoming' });
+  const seenActivityKeys = new Set();
+  const acts = actsRaw.filter((a) => {
+    const key = activityKey(a);
+    if (seenActivityKeys.has(key)) return false;
+    seenActivityKeys.add(key);
+    return true;
+  });
   actBox.innerHTML = acts.length
     ? acts.map(a => activityCard(a)).join('')
     : `<div class="empty"><i class="fa-regular fa-calendar"></i><p>No upcoming activities in this club.</p></div>`;
@@ -2416,7 +2440,10 @@ export async function renderClubs(container) {
       toast('Joined', { kind: 'success' });
       renderClubs(container);
     });
-    on(body, 'click', '[data-open]', () => navigate('#/community'));
+    on(body, 'click', '[data-open]', (_ev, el) => {
+      _activeClubId = el.dataset.open || null;
+      navigate('#/community');
+    });
   };
   on(container, 'click', '[data-ctab]', (_ev, btn) => {
     container.querySelectorAll('[data-ctab]').forEach(t => t.classList.toggle('active', t === btn));
@@ -2441,7 +2468,7 @@ function clubCard(c, mineIds) {
         <div style="color:var(--ink-500);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.description || '')}</div>
       </div>
       ${joined
-        ? `<button class="btn ghost sm" data-open>Open</button>`
+        ? `<button class="btn ghost sm" data-open="${esc(c.id)}">Open</button>`
         : `<button class="btn sm" data-join="${esc(c.id)}">Join</button>`}
     </article>`;
 }

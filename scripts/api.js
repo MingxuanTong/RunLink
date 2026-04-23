@@ -81,7 +81,9 @@ export async function listClubs({ mineOnly = false } = {}) {
   const { data: memberships } = await supabase
     .from('club_members').select('club_id').eq('user_id', user.id);
   const mine = new Set((memberships ?? []).map(m => m.club_id));
-  return (data ?? []).filter(c => mine.has(c.id));
+  // Be resilient to historical data drift where the owner row in `club_members`
+  // is missing: owners should still see/manage their own clubs.
+  return (data ?? []).filter(c => mine.has(c.id) || c.owner_id === user.id);
 }
 
 export async function getClub(clubId) {

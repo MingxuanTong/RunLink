@@ -155,7 +155,7 @@ function activityCard(a, { wide = false, badge, fullChip } = {}) {
   const isPast = ends < new Date();
   const timeLabel = isPast
     ? fmtDate(a.end_at, { withTime: false })
-    : `${starts.toLocaleDateString(undefined,{month:'short',day:'numeric'})} · ${fmtTime(a.start_at)} → ${fmtTime(a.end_at)}`;
+    : `${starts.toLocaleDateString('en',{month:'short',day:'numeric'})} · ${fmtTime(a.start_at)} → ${fmtTime(a.end_at)}`;
   const until = !isPast && starts > new Date()
     ? `<span class="chip brand">${esc(timeUntil(a.start_at))}</span>` : '';
   const statusChip =
@@ -344,9 +344,17 @@ export async function renderDiscover(container) {
 
   const upBox = $('#upcoming', container);
   const searchEl = $('#disc-search', container);
+
+  // Fetch user's registrations early to exclude from recommendations
+  const regs = await api.listMyRegistrations({ timeframe: 'upcoming' });
+  const registeredIds = new Set(regs.filter(r => r.status !== 'cancelled').map(r => r.activity?.id).filter(Boolean));
+
   const featured = upcoming[0] || null;
   const featuredKey = featured ? activityKey(featured) : null;
-  const recsPool = featuredKey ? upcoming.filter(a => activityKey(a) !== featuredKey) : [...upcoming];
+  // Filter out activities user is already registered for
+  const recsPool = featuredKey
+    ? upcoming.filter(a => activityKey(a) !== featuredKey && !registeredIds.has(a.id))
+    : upcoming.filter(a => !registeredIds.has(a.id));
   const recs = recsPool.slice(0, 5);
   const pinnedKeys = new Set([featured, ...recs].filter(Boolean).map(a => activityKey(a)));
   /** @type {'for-you'|'nearby'|'this-week'|'beginner'|'trail'} */
@@ -384,6 +392,8 @@ export async function renderDiscover(container) {
     let rows = rowsForDiscoverMode(upcoming);
     // Avoid showing the same activity in top sections and the grid.
     rows = rows.filter(a => !pinnedKeys.has(activityKey(a)));
+    // Also exclude activities user is already registered for
+    rows = rows.filter(a => !registeredIds.has(a.id));
     const q = (searchEl?.value || '').trim().toLowerCase();
     if (q) {
       rows = rows.filter(a =>
@@ -435,16 +445,16 @@ export async function renderDiscover(container) {
   // My registrations — fixed 2 cards as per PRD §4.1
   const myBox = $('#my-regs', container);
   showLoading(myBox, 2);
-  const regs = await api.listMyRegistrations({ timeframe: 'upcoming' });
-  const live = regs.filter(r => {
+  const activeRegs = regs.filter(r => r.status !== 'cancelled');
+  const live = activeRegs.filter(r => {
     const a = r.activity;
     if (!a) return false;
     const now = new Date();
     const wsOK = !a.checkin_window_start || new Date(a.checkin_window_start) <= now;
     const weOK = !a.checkin_window_end   || new Date(a.checkin_window_end)   >= now;
-    return wsOK && weOK && r.status !== 'cancelled';
+    return wsOK && weOK;
   });
-  const ordered = [...live, ...regs.filter(r => !live.includes(r))].slice(0, 2);
+  const ordered = [...live, ...activeRegs.filter(r => !live.includes(r))].slice(0, 2);
   myBox.innerHTML = ordered.length
     ? ordered.map(r => regCardHtml(r)).join('<div style="height:10px"></div>')
     : `<div class="empty">
@@ -867,7 +877,7 @@ export async function renderActivity(container, { id }) {
         <p style="color:var(--ink-700);font-size:14px;line-height:1.6;margin:0 0 14px">${esc(activity.description || '')}</p>
 
         <div class="stat-grid" style="margin-bottom:14px">
-          <div class="stat"><div class="v">${esc(new Date(activity.start_at).toLocaleDateString(undefined,{month:'short',day:'numeric'}))}</div><div class="l">Date</div></div>
+          <div class="stat"><div class="v">${esc(new Date(activity.start_at).toLocaleDateString('en',{month:'short',day:'numeric'}))}</div><div class="l">Date</div></div>
           <div class="stat"><div class="v">${esc(fmtTime(activity.start_at))}</div><div class="l">Start</div></div>
           <div class="stat"><div class="v">${esc(fmtTime(activity.end_at))}</div><div class="l">End</div></div>
         </div>
@@ -2143,6 +2153,14 @@ export async function renderProfile(container) {
     ${isOrganizer ? `
       <div class="section-head">Organizer tools</div>
       <div class="pro-list">
+        <button class="row" data-organizer-dashboard>
+          <i class="lead" style="background: #0EA5E9;"><i class="fa-solid fa-chart-simple"></i></i>
+          <div class="meta">
+            <div class="t">Activity dashboard</div>
+            <div class="s">${ownedClubs.length} club${ownedClubs.length > 1 ? 's' : ''} · registration & check-in stats</div>
+          </div>
+          <i class="fa-solid fa-chevron-right chev"></i>
+        </button>
         <button class="row" data-publish>
           <i class="lead" style="background: var(--brand);"><i class="fa-solid fa-plus"></i></i>
           <div class="meta">
@@ -2218,6 +2236,8 @@ export async function renderProfile(container) {
     toast('Logged out', { kind: 'info' });
   });
   // Organizer-only rows
+  const dashBtn = container.querySelector('[data-organizer-dashboard]');
+  if (dashBtn) dashBtn.addEventListener('click', () => navigate('#/organizer/dashboard'));
   const pubBtn = container.querySelector('[data-publish]');
   if (pubBtn) pubBtn.addEventListener('click', () => {
     if (ownedClubs.length === 1) navigate(`#/club/${ownedClubs[0].id}/publish`);
@@ -2934,19 +2954,141 @@ export async function renderPublishActivity(container, { clubId }) {
 }
 
 /* =================================================================
+   ORGANIZER DASHBOARD — aggregated view across all owned clubs
+   ================================================================= */
+
+export async function renderOrganizerDashboard(container) {
+  setHeader({ title: 'Activity dashboard', backTo: '#/profile' });
+  const user = await api.getCurrentUser();
+  const myClubs = await api.listClubs({ mineOnly: true }).catch(() => []);
+  const ownedClubs = (myClubs || []).filter(c => c.owner_id === user?.id);
+  if (ownedClubs.length === 0) {
+    container.innerHTML = `<div class="empty"><h3>Not authorized</h3><p>Only organizers can view this dashboard.</p></div>`;
+    return;
+  }
+
+  const activities = await api.listOrganizerActivities();
+  // Fetch registration counts for each activity
+  const activitiesWithStats = await Promise.all(activities.map(async a => {
+    const regs = await api.listActivityRegistrations(a.id).catch(() => []);
+    const active = regs.filter(r => r.status !== 'cancelled');
+    const checkedIn = active.filter(r => ['checked_in', 'completed', 'no_run_recorded'].includes(r.status)).length;
+    const late = active.filter(r => r.status === 'late').length;
+    const noShow = active.filter(r => r.status === 'registered' && new Date() > new Date(a.end_at)).length;
+    return { ...a, registered: active.length, checkedIn, late, noShow };
+  }));
+
+  // Group by club
+  const clubMap = new Map();
+  for (const club of ownedClubs) clubMap.set(club.id, { club, activities: [] });
+  for (const a of activitiesWithStats) {
+    const entry = clubMap.get(a.club_id);
+    if (entry) entry.activities.push(a);
+  }
+
+  const totalActivities = activitiesWithStats.length;
+  const totalRegistered = activitiesWithStats.reduce((s, a) => s + a.registered, 0);
+  const totalCheckedIn = activitiesWithStats.reduce((s, a) => s + a.checkedIn, 0);
+  const upcoming = activitiesWithStats.filter(a => new Date(a.end_at) >= new Date() && a.status !== 'cancelled').length;
+
+  container.innerHTML = `
+    <style>
+      .org-dash-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
+      @media (max-width: 340px) { .org-dash-stats { grid-template-columns: 1fr 1fr; } }
+      .org-dash-stat { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px 12px; text-align: center; }
+      .org-dash-stat .v { font-family: var(--font-display); font-size: 26px; font-weight: 700; color: var(--ink-900); }
+      .org-dash-stat .l { font-size: 12px; color: var(--ink-500); margin-top: 4px; }
+      .org-club-section { margin-bottom: 20px; }
+      .org-club-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+      .org-club-header img { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; border: 1px solid var(--line); }
+      .org-club-header .club-icon { width: 28px; height: 28px; border-radius: 50%; background: var(--surface-2); display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--ink-400); border: 1px solid var(--line); }
+      .org-club-name { font-family: var(--font-display); font-size: 17px; font-weight: 700; color: var(--ink-900); }
+      .org-act-card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s; }
+      .org-act-card:hover { border-color: var(--ink-300); }
+      .org-act-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+      .org-act-title { font-weight: 600; font-size: 15px; color: var(--ink-900); }
+      .org-act-date { font-size: 13px; color: var(--ink-500); margin-top: 2px; }
+      .org-act-status { padding: 4px 10px; border-radius: 99px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+      .org-act-status.published { background: #FFF7ED; color: #9A3412; }
+      .org-act-status.completed { background: #F1F5F9; color: #334155; }
+      .org-act-status.cancelled { background: #FEF2F2; color: #991B1B; }
+      .org-act-status.draft { background: #F5F3FF; color: #5B21B6; }
+      .org-act-metrics { display: flex; gap: 16px; margin-top: 10px; }
+      .org-act-metric { font-size: 13px; color: var(--ink-600); }
+      .org-act-metric strong { color: var(--ink-900); font-weight: 600; }
+    </style>
+
+    <div class="org-dash-stats">
+      <div class="org-dash-stat">
+        <div class="v">${totalActivities}</div>
+        <div class="l">Activities</div>
+      </div>
+      <div class="org-dash-stat">
+        <div class="v">${totalRegistered}</div>
+        <div class="l">Registered</div>
+      </div>
+      <div class="org-dash-stat">
+        <div class="v">${totalCheckedIn}</div>
+        <div class="l">Checked in</div>
+      </div>
+    </div>
+
+    ${upcoming > 0 ? `<div style="margin-bottom:16px;font-size:14px;color:var(--ink-500)"><i class="fa-solid fa-clock" style="margin-right:4px"></i> ${upcoming} upcoming</div>` : ''}
+
+    ${[...clubMap.values()].map(({ club, activities: acts }) => acts.length > 0 ? `
+      <div class="org-club-section">
+        <div class="org-club-header">
+          ${club.crest_url
+            ? `<img src="${esc(club.crest_url)}" alt="">`
+            : `<div class="club-icon"><i class="fa-solid fa-people-group"></i></div>`}
+          <div class="org-club-name">${esc(club.name)}</div>
+        </div>
+        ${acts.map(a => {
+          const dateStr = a.start_at
+            ? new Date(a.start_at).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' }) + ' · ' + fmtTime(a.start_at)
+            : '';
+          return `
+          <div class="org-act-card" data-nav="#/activity/${esc(a.id)}/dashboard">
+            <div class="org-act-top">
+              <div>
+                <div class="org-act-title">${esc(a.title)}</div>
+                ${dateStr ? `<div class="org-act-date">${dateStr}</div>` : ''}
+              </div>
+              <span class="org-act-status ${esc(a.status)}">${esc(a.status)}</span>
+            </div>
+            <div class="org-act-metrics">
+              <span class="org-act-metric"><strong>${a.registered}</strong> reg${a.total_cap ? ` / ${a.total_cap}` : ''}</span>
+              <span class="org-act-metric"><strong>${a.checkedIn}</strong> in</span>
+              ${a.late ? `<span class="org-act-metric"><strong>${a.late}</strong> late</span>` : ''}
+              ${a.noShow ? `<span class="org-act-metric"><strong>${a.noShow}</strong> no-show</span>` : ''}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    ` : '').join('')}
+
+    ${totalActivities === 0 ? `<div class="empty" style="padding:40px 20px"><i class="fa-solid fa-calendar-xmark" style="font-size:32px;color:var(--ink-300)"></i><h3>No activities yet</h3><p>Publish your first club activity to see stats here.</p></div>` : ''}
+  `;
+
+  on(container, 'click', '[data-nav]', (_ev, el) => navigate(el.dataset.nav));
+}
+
+/* =================================================================
    DATA DASHBOARD (organizer-only)
    ================================================================= */
 
 export async function renderDataDashboard(container, { activityId }) {
-  setHeader({ title: 'Dashboard', backTo: `#/activity/${activityId}` });
+  setHeader({ title: 'Activity dashboard', backTo: `#/activity/${activityId}` });
   const activity = await api.getActivity(activityId);
   if (!activity) {
     container.innerHTML = `<div class="empty"><h3>Not found</h3></div>`;
     return;
   }
   const user = await api.getCurrentUser();
-  const isOwner = activity.club?.owner_id === user?.id;
-  if (!isOwner) {
+  const members = await api.listClubMembers(activity.club?.id);
+  const myRole = members.find(m => m.profile?.id === user?.id)?.role;
+  const isOrganizer = activity.club?.owner_id === user?.id || myRole === 'co_organizer';
+  if (!isOrganizer) {
     container.innerHTML = `<div class="empty"><h3>Not authorized</h3><p>Only organizers of this club can view the dashboard.</p></div>`;
     return;
   }
@@ -2956,49 +3098,126 @@ export async function renderDataDashboard(container, { activityId }) {
 async function loadDashboard(container, activityId, activity) {
   const rows = await api.listActivityRegistrations(activityId);
   const active = rows.filter(r => r.status !== 'cancelled');
-  const checkedIn = active.filter(r => r.status === 'checked_in' || r.status === 'late').length;
+  const checkedIn = active.filter(r => r.status === 'checked_in' || r.status === 'late' || r.status === 'completed' || r.status === 'no_run_recorded').length;
   const lateCount = active.filter(r => r.status === 'late').length;
-  const cancelledCount = rows.filter(r => r.status === 'cancelled').length;
+  const noShowCount = active.filter(r => r.status === 'registered' && new Date() > new Date(activity.end_at)).length;
 
   const windowOpen = activity.checkin_window_end
     ? new Date() < new Date(activity.checkin_window_end) : true;
 
+  // Parse groups with capacity
+  const groups = Array.isArray(activity.groups) ? activity.groups : [];
+  const groupStats = groups.map(g => {
+    const count = rows.filter(r => r.group_name === g.name && r.status !== 'cancelled').length;
+    const cap = g.cap || null;
+    return { ...g, count, cap };
+  });
+
+  // Format date/time like "Sat 18 Nov · 06:30 · Embankment"
+  const dateStr = activity.start_at
+    ? `${new Date(activity.start_at).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' })} · ${fmtTime(activity.start_at)} · ${esc(activity.meetup_place || 'TBD')}`
+    : esc(activity.meetup_place || 'TBD');
+
   container.innerHTML = `
-    <div class="card">
-      <div style="font-family:var(--font-display);font-size:22px;color:var(--ink-900)">${esc(activity.title)}</div>
-      <div style="color:var(--ink-500);font-size:12px">${esc(fmtDate(activity.start_at))}</div>
-    </div>
-    <div class="stat-grid" style="margin-top:12px">
-      <div class="stat"><div class="v">${active.length}${activity.total_cap ? `<small style="font-size:14px;color:var(--ink-500)"> / ${activity.total_cap}</small>` : ''}</div><div class="l">Registered</div></div>
-      <div class="stat"><div class="v">${checkedIn}</div><div class="l">Checked in</div></div>
-      <div class="stat"><div class="v">${lateCount}</div><div class="l">Late</div></div>
-      <div class="stat"><div class="v">${cancelledCount}</div><div class="l">Cancelled</div></div>
+    <style>
+      .dashboard-header { padding: 8px 0 12px; }
+      .dashboard-title { font-family: var(--font-display); font-size: 26px; font-weight: 700; color: var(--ink-900); line-height: 1.2; }
+      .dashboard-meta { color: var(--ink-500); font-size: 14px; margin-top: 4px; }
+      .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 16px; }
+      @media (max-width: 480px) { .stats-row { grid-template-columns: repeat(2, 1fr); } }
+      .stat-card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px 8px; text-align: center; }
+      .stat-value { font-family: var(--font-display); font-size: 28px; font-weight: 700; color: var(--ink-900); }
+      .stat-label { font-size: 12px; color: var(--ink-500); margin-top: 4px; }
+      .section-heading { font-family: var(--font-display); font-size: 17px; font-weight: 700; color: var(--ink-900); margin: 24px 0 12px; }
+      .group-capacity { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 8px 16px; }
+      .group-row { padding: 12px 0; border-bottom: 1px solid var(--line-2); }
+      .group-row:last-child { border-bottom: none; }
+      .group-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+      .group-name { font-weight: 600; font-size: 14px; color: var(--ink-900); }
+      .group-count { font-size: 14px; color: var(--ink-600); font-weight: 500; }
+      .progress-track { width: 100%; height: 6px; background: var(--line-2); border-radius: 3px; overflow: hidden; }
+      .progress-fill { height: 100%; background: var(--ink-900); border-radius: 3px; transition: width 0.3s ease; }
+      .progress-fill.full { background: var(--ink-900); }
+      .participant-list { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+      .participant-item { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--line-2); }
+      .participant-item:last-child { border-bottom: none; }
+      .participant-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--surface-2); display: flex; align-items: center; justify-content: center; font-size: 14px; color: var(--ink-400); overflow: hidden; border: 1px solid var(--line); }
+      .participant-avatar img { width: 100%; height: 100%; object-fit: cover; }
+      .participant-info { flex: 1; }
+      .participant-name { font-weight: 600; font-size: 15px; color: var(--ink-900); }
+      .participant-group { font-size: 13px; color: var(--ink-500); margin-top: 1px; }
+      .status-badge { padding: 5px 12px; border-radius: 99px; font-size: 12px; font-weight: 500; }
+      .status-badge.checked-in { background: #F1F5F9; color: #334155; }
+      .status-badge.late { background: #FEF3C7; color: #92400E; }
+      .status-badge.no-show { background: #1E293B; color: #F8FAFC; }
+      .status-badge.registered { background: #FFF7ED; color: #9A3412; }
+      .mark-btn { padding: 5px 10px; font-size: 12px; }
+    </style>
+
+    <div class="dashboard-header">
+      <div class="dashboard-title">${esc(activity.title)}</div>
+      <div class="dashboard-meta">${dateStr}</div>
     </div>
 
-    <div class="section-title"><h2>Roster</h2></div>
-    <div class="card" style="padding:0;overflow:hidden">
-      <table class="table">
-        <thead>
-          <tr><th>Runner</th><th>Group</th><th>Status</th><th>Check-in</th><th></th></tr>
-        </thead>
-        <tbody id="roster-body">
-          ${rows.map(r => `
-            <tr>
-              <td>${esc(r.user?.display_name || 'Runner')}</td>
-              <td>${esc(r.group_name || '—')}</td>
-              <td>${statusChipFor(r.status)}</td>
-              <td style="color:var(--ink-500);font-size:12px">
-                ${r.checkin_ts ? esc(fmtTime(r.checkin_ts)) : '—'}
-                ${r.checkin_method === 'fallback' ? '<br><span class="chip ghost" style="font-size:10px">self-confirmed</span>' : ''}
-              </td>
-              <td style="text-align:right">
-                ${(r.status === 'registered' && windowOpen)
-                  ? `<button class="btn sm" data-mark="${esc(r.user_id)}"><i class="fa-solid fa-check"></i> Mark in</button>`
-                  : ''}
-              </td>
-            </tr>`).join('')}
-        </tbody>
-      </table>
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-value">${active.length}${activity.total_cap ? `<small style="font-size:14px;color:var(--ink-500)">/${activity.total_cap}</small>` : ''}</div>
+        <div class="stat-label">Registered</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">${checkedIn}</div>
+        <div class="stat-label">Checked in</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">${lateCount}</div>
+        <div class="stat-label">Late</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">${noShowCount}</div>
+        <div class="stat-label">No-show</div>
+      </div>
+    </div>
+
+    ${groupStats.length > 0 ? `
+    <div class="section-heading">Group capacity</div>
+    <div class="group-capacity">
+      ${groupStats.map(g => {
+        const pct = g.cap ? Math.min((g.count / g.cap) * 100, 100) : 0;
+        const isFull = g.cap && g.count >= g.cap;
+        return `
+        <div class="group-row">
+          <div class="group-header">
+            <div class="group-name">${esc(g.name)}${g.pace ? ` · ${esc(g.pace)}` : ''}</div>
+            <div class="group-count">${g.count}${g.cap ? `/${g.cap}` : ''}</div>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill ${isFull ? 'full' : ''}" style="width: ${pct}%"></div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+    ` : ''}
+
+    <div class="section-heading">Participants</div>
+    <div class="participant-list">
+      ${active.length === 0 ? '<div class="empty" style="padding:24px"><p>No participants yet.</p></div>' : ''}
+      ${active.map(r => `
+        <div class="participant-item">
+          <div class="participant-avatar">
+            ${r.user?.avatar_url ? `<img src="${esc(r.user.avatar_url)}" alt="">` : '<i class="fa-solid fa-user"></i>'}
+          </div>
+          <div class="participant-info">
+            <div class="participant-name">${esc(r.user?.display_name || 'Runner')}</div>
+            <div class="participant-group">${esc(r.group_name || 'No group')}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            ${renderStatusBadge(r.status, activity.end_at)}
+            ${(r.status === 'registered' && windowOpen)
+              ? `<button class="btn sm mark-btn" data-mark="${esc(r.user_id)}">Mark in</button>`
+              : ''}
+          </div>
+        </div>
+      `).join('')}
     </div>
   `;
 
@@ -3017,14 +3236,22 @@ async function loadDashboard(container, activityId, activity) {
   });
 }
 
-function statusChipFor(status) {
-  const map = {
-    registered:   `<span class="chip brand">Registered</span>`,
-    checked_in:   `<span class="chip success">Checked in</span>`,
-    late:         `<span class="chip warn">Late</span>`,
-    cancelled:    `<span class="chip danger">Cancelled</span>`,
-    completed:    `<span class="chip success">Completed</span>`,
-    no_run_recorded: `<span class="chip ghost">No run recorded</span>`,
-  };
-  return map[status] || `<span class="chip ghost">${esc(status)}</span>`;
+function renderStatusBadge(status, endAt) {
+  // No-show: registered but activity has ended
+  if (status === 'registered' && endAt && new Date() > new Date(endAt)) {
+    return '<span class="status-badge no-show">No-show</span>';
+  }
+  if (status === 'checked_in' || status === 'completed') {
+    return '<span class="status-badge checked-in">Checked in</span>';
+  }
+  if (status === 'late') {
+    return '<span class="status-badge late">Late</span>';
+  }
+  if (status === 'registered') {
+    return '<span class="status-badge registered">Registered</span>';
+  }
+  if (status === 'no_run_recorded') {
+    return '<span class="status-badge checked-in">Checked in</span>';
+  }
+  return `<span class="status-badge registered">${esc(status)}</span>`;
 }

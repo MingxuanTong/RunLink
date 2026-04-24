@@ -279,6 +279,27 @@ export async function cancelActivity(activityId) {
   return updateActivity(activityId, { status: 'cancelled' });
 }
 
+/* =========================================== Organizer Activities */
+
+export async function listOrganizerActivities() {
+  const user = await getCurrentUser();
+  if (!user) return [];
+  // Get all clubs owned by the user
+  const { data: clubs, error: clubErr } = await supabase
+    .from('clubs').select('id, name, crest_url').eq('owner_id', user.id);
+  if (clubErr) throw clubErr;
+  if (!clubs || clubs.length === 0) return [];
+  const clubIds = clubs.map(c => c.id);
+  // Fetch activities across all owned clubs
+  const { data: activities, error: actErr } = await supabase
+    .from('activities')
+    .select('*, club:clubs(id, name, crest_url, owner_id)')
+    .in('club_id', clubIds)
+    .order('start_at', { ascending: false });
+  if (actErr) throw actErr;
+  return activities ?? [];
+}
+
 /* =================================================== Registrations */
 
 export async function listMyRegistrations({ timeframe } = {}) {

@@ -130,9 +130,9 @@ export function timeUntil(iso) {
 export function fmtDate(iso, { withTime = true } = {}) {
   if (!iso) return '';
   const d = new Date(iso);
-  const date = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  const date = d.toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' });
   if (!withTime) return date;
-  const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  const time = d.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' });
   return `${date} · ${time}`;
 }
 
@@ -173,10 +173,13 @@ export function initials(name) {
 
 export function avatarHtml(profile, { size = 'md' } = {}) {
   const sz = size === 'sm' ? 'sm' : size === 'lg' ? 'lg' : '';
-  if (profile?.avatar_url) {
-    return `<img class="avatar ${sz}" src="${esc(profile.avatar_url)}" alt="${esc(profile.display_name || '')}" />`;
+  // Support both user (avatar_url, display_name) and club (crest_url, name) objects
+  const imgUrl = profile?.avatar_url || profile?.crest_url;
+  const name = profile?.display_name || profile?.name;
+  if (imgUrl) {
+    return `<img class="avatar ${sz}" src="${esc(imgUrl)}" alt="${esc(name || '')}" />`;
   }
-  return `<span class="avatar ${sz}">${esc(initials(profile?.display_name))}</span>`;
+  return `<span class="avatar ${sz}">${esc(initials(name))}</span>`;
 }
 
 export function tier(totalMeters) {

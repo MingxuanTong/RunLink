@@ -24,6 +24,7 @@ const ROUTES = [
   { path: /^#\/activity\/([^/]+)$/,           view: 'activity',         auth: true, params: ['id'] },
   { path: /^#\/club\/([^/]+)\/manage$/,       view: 'manageClub',       auth: true, params: ['id'] },
   { path: /^#\/club\/([^/]+)\/publish$/,      view: 'publishActivity',  auth: true, params: ['clubId'] },
+  { path: /^#\/organizer\/dashboard$/,        view: 'organizerDashboard', auth: true },
 ];
 
 const VIEW_FN = {
@@ -41,6 +42,7 @@ const VIEW_FN = {
   manageClub: views.renderManageClub,
   publishActivity: views.renderPublishActivity,
   dataDashboard: views.renderDataDashboard,
+  organizerDashboard: views.renderOrganizerDashboard,
 };
 
 const BOTTOM_TABS = [

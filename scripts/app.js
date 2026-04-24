@@ -59,6 +59,27 @@ const BOTTOM_TABS = [
 let currentSession = null;
 let realtimeUnsub = null;
 
+// View cache: stash the live DOM + header state when leaving a route so we can
+// restore it without a full re-render (preserving form inputs, file selections,
+// map instances, etc.).  Keyed by the full hash string.
+const viewCache = new Map();
+const CACHE_MAX = 6;
+
+function stashView(hash, container, viewName) {
+  // Don't cache auth views or the running view (map state is complex)
+  if (viewName === 'login' || viewName === 'signup') return;
+  if (viewCache.size >= CACHE_MAX) {
+    const oldest = viewCache.keys().next().value;
+    viewCache.delete(oldest);
+  }
+  viewCache.set(hash, {
+    container,
+    viewName,
+    headerTitle: $('#app-header-title')?.textContent || 'RunLink',
+    headerBackTo: $('#back-btn')?.hidden ? null : ($('#back-btn').onclick ? true : null),
+  });
+}
+
 export function navigate(hash) {
   if (location.hash === hash) {
     handleRoute();
@@ -135,6 +156,7 @@ function markActiveTab() {
 async function handleRoute() {
   const match = matchRoute();
   const signedIn = !!currentSession;
+  const fullHash = location.hash || '#/discover';
 
   // Guard: need auth
   if (match?.auth && !signedIn) return navigate('#/login');
@@ -146,7 +168,8 @@ async function handleRoute() {
   // Pick shell
   const appShell   = $('#app');
   const authShell  = $('#auth-shell');
-  if (match.shell === 'auth' || !signedIn) {
+  const useAuthShell = match.shell === 'auth' || !signedIn;
+  if (useAuthShell) {
     appShell.hidden = true;
     authShell.hidden = false;
   } else {
@@ -154,10 +177,29 @@ async function handleRoute() {
     appShell.hidden = false;
   }
 
+  const containerId = useAuthShell ? 'auth-view' : 'view';
+  const currentContainer = document.getElementById(containerId);
+
+  // Stash the outgoing view before destroying it
+  if (currentContainer && currentContainer._routeHash && currentContainer._routeView) {
+    stashView(currentContainer._routeHash, currentContainer, currentContainer._routeView);
+  }
+
+  // Check cache: restore a stashed container instead of re-rendering
+  const cached = viewCache.get(fullHash);
+  if (cached && cached.container !== currentContainer) {
+    viewCache.delete(fullHash);
+    currentContainer.replaceWith(cached.container);
+    markActiveTab();
+    cached.container.setAttribute('tabindex', '-1');
+    cached.container.focus({ preventScroll: true });
+    // Don't scrollTo — user left the page at some scroll position, preserve it
+    return;
+  }
+
   // Render — clone-replace container so previous delegated listeners are dropped.
-  const oldContainer = (match.shell === 'auth' || !signedIn) ? $('#auth-view') : $('#view');
-  const container = oldContainer.cloneNode(false);
-  oldContainer.replaceWith(container);
+  const container = currentContainer.cloneNode(false);
+  currentContainer.replaceWith(container);
   const fn = VIEW_FN[match.view];
   if (!fn) {
     container.innerHTML = `<div class="empty">Unknown route</div>`;
@@ -180,6 +222,8 @@ async function handleRoute() {
       <button class="btn ghost" onclick="location.reload()">Reload</button>
     </div>`;
   }
+  container._routeHash = fullHash;
+  container._routeView = match.view;
   markActiveTab();
   // Move focus for screen readers
   container.setAttribute('tabindex', '-1');

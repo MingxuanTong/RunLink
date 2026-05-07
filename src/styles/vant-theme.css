@@ -1,0 +1,15 @@
+:root {
+  --van-primary-color: #F97316;
+  --van-primary-color-2: #FB923C;
+  --van-success-color: #22C55E;
+  --van-danger-color: #EF4444;
+  --van-warning-color: #F59E0B;
+  --van-text-color: #0F172A;
+  --van-text-color-2: #334155;
+  --van-text-color-3: #64748B;
+  --van-border-color: #E2E8F0;
+  --van-background: #F8FAFC;
+  --van-background-2: #FFFFFF;
+  --van-font-family: 'Barlow', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --van-toast-z-index: 9000;
+}

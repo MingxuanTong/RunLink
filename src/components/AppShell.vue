@@ -41,7 +41,7 @@ function navigateTo(path) {
 }
 
 async function handleLogout() {
-  if (!await confirm({ title: 'Log out of RunLink?', message: 'You can sign back in anytime.', confirmText: 'Log out', danger: true })) return
+  if (!await confirm({ title: 'Log out of RunLink?', message: 'You can sign back in anytime.', confirmText: 'Log out', danger: true, className: 'dialog-warn' })) return
   await auth.signOut()
   toast('Logged out')
 }

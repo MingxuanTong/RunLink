@@ -37,7 +37,7 @@ const unlockedCount = computed(() => achievements.value.filter(a => a.unlocked).
 const profileCoverUrl = computed(() => profile.value?.cover_url || DEFAULT_PROFILE_COVER_URL)
 
 async function handleLogout() {
-  if (!await confirm({ title: 'Log out of RunLink?', message: 'You can sign back in anytime.', confirmText: 'Log out', danger: true })) return
+  if (!await confirm({ title: 'Log out of RunLink?', message: 'You can sign back in anytime.', confirmText: 'Log out', danger: true, className: 'dialog-warn' })) return
   await api.signOut()
   toast('Logged out')
 }

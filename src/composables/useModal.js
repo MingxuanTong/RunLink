@@ -2,7 +2,7 @@ import { showConfirmDialog, showDialog } from 'vant'
 
 export function useModal() {
   return {
-    async confirm({ title, message, confirmText = 'Confirm', cancelText = 'Cancel', danger = false } = {}) {
+    async confirm({ title, message, confirmText = 'Confirm', cancelText = 'Cancel', danger = false, className = '' } = {}) {
       try {
         await showConfirmDialog({
           title,
@@ -10,6 +10,7 @@ export function useModal() {
           confirmButtonText: confirmText,
           cancelButtonText: cancelText,
           confirmButtonColor: danger ? '#EF4444' : '#F97316',
+          className,
         })
         return true
       } catch {

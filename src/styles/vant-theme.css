@@ -49,6 +49,7 @@
 .van-overlay {
   position: fixed !important;
   inset: 0 !important;
+  background: rgba(0, 0, 0, 0.5) !important;
 }
 
 .van-dialog {
@@ -56,6 +57,7 @@
   top: 50% !important;
   left: 50% !important;
   transform: translate(-50%, -50%) !important;
+  background: #fff !important;
   box-shadow: 0 20px 40px rgba(15, 23, 42, 0.12), 0 8px 16px rgba(15, 23, 42, 0.06);
   overflow: hidden;
 }
@@ -98,3 +100,8 @@
 .toast--error   { border-left: 3px solid #EF4444 !important; }
 .toast--warn    { border-left: 3px solid #F59E0B !important; }
 .toast--info    { border-left: 3px solid #0EA5E9 !important; }
+
+/* Dialog warn variant — matches toast warn style */
+.dialog-warn {
+  border-left: 3px solid #F59E0B !important;
+}

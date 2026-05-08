@@ -1663,6 +1663,34 @@ body.run-fullscreen .run-fullbleed {
 .run-fullbleed .big-start:hover  { transform: scale(1.03); }
 .run-fullbleed .big-start:active { transform: scale(0.97); }
 
+.run-fullbleed .crew-demo-btn {
+  align-self: center;
+  margin-top: 8px;
+  padding: 8px 18px; border-radius: 999px;
+  background: rgba(59,130,246,0.85); color: #fff;
+  font-size: 13px; font-weight: 600;
+  border: 1px solid rgba(255,255,255,0.2);
+  cursor: pointer; transition: background 0.15s;
+}
+.run-fullbleed .crew-demo-btn:hover { background: rgba(59,130,246,1); }
+.run-fullbleed .crew-demo-btn i { margin-right: 6px; }
+
+/* Crew marker name labels */
+.crew-marker-label {
+  background: rgba(0,0,0,0.75) !important;
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  color: #fff !important;
+  border: 1px solid rgba(255,255,255,0.2) !important;
+  border-radius: 6px !important;
+  padding: 2px 7px !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3) !important;
+  white-space: nowrap !important;
+}
+.crew-marker-label::before { border-top-color: rgba(0,0,0,0.75) !important; }
+.leaflet-tooltip-top.crew-marker-label::before { border-top-color: rgba(0,0,0,0.75) !important; }
+
 .run-fullbleed .status-strip {
   display: flex; justify-content: space-between; align-items: center;
   color: rgba(255,255,255,0.72); font-size: 12px;

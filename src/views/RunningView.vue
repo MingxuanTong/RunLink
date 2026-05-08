@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import * as api from '@/api'
+import { supabase } from '@/lib/supabase'
 import { useToast } from '@/composables/useToast'
 import { useRunRecorder } from '@/composables/useRunRecorder'
 import { fmtDistance, fmtDuration, fmtPace, fmtTime } from '@/utils/formatters'
@@ -43,6 +44,20 @@ let crewMarkers = new Map()
 const crewMembers = ref([])
 const crewExpanded = ref(false)
 const user = ref(null)
+
+// --- Crew demo mode ---
+const crewDemo = ref(false)
+let crewDemoInterval = null
+let demoRouteCoords = null // array of [lng, lat] from the route GeoJSON
+const MOCK_CREW = [
+  { user_id: 'demo-alex',  user: { display_name: 'Alex Chen',   avatar_url: null } },
+  { user_id: 'demo-sam',   user: { display_name: 'Sam Rivera',  avatar_url: null } },
+  { user_id: 'demo-jordan',user: { display_name: 'Jordan Lee',  avatar_url: null } },
+  { user_id: 'demo-morgan',user: { display_name: 'Morgan Wu',   avatar_url: null } },
+  { user_id: 'demo-taylor',user: { display_name: 'Taylor Kim',  avatar_url: null } },
+]
+// Each crew member has a routeIndex (position along the route) and pace offset
+const mockCrewState = new Map()
 
 // --- Preview stats ---
 const previewDistance = ref('0.00')
@@ -138,6 +153,57 @@ function clearRoute() {
   nextTick(initPreviewMap)
 }
 
+async function startCrewDemo() {
+  // Fetch the 西浦落日跑 route from Supabase
+  let routeGeoJson = null
+  let center = { lat: 31.2781, lng: 120.7377 } // fallback: first point of route
+  try {
+    const { data } = await supabase
+      .from('activities')
+      .select('route_geojson')
+      .eq('title', '西浦落日跑')
+      .not('route_geojson', 'is', null)
+      .limit(1)
+      .single()
+    if (data?.route_geojson) {
+      routeGeoJson = data.route_geojson
+      const coords = routeGeoJson?.features?.[0]?.geometry?.coordinates
+      if (coords?.length) {
+        demoRouteCoords = coords
+        center = { lat: coords[0][1], lng: coords[0][0] }
+      }
+    }
+  } catch { /* use fallback center */ }
+
+  // Create a fake linked activity with the real route
+  crewDemo.value = true
+  linkedActivity.value = {
+    id: 'demo-activity',
+    title: '西浦落日跑',
+    club: { name: 'XJTLU Running', display_name: 'XJTLU Running' },
+    meetup_lat: center.lat,
+    meetup_lng: center.lng,
+    meetup_name: '文星广场',
+    start_at: new Date().toISOString(),
+    group_name: null,
+    route_geojson: routeGeoJson,
+  }
+  // Initialize mock crew — each starts near the route beginning with different paces
+  MOCK_CREW.forEach((m, i) => {
+    mockCrewState.set(m.user_id, {
+      routeIndex: 0,          // current position along the route
+      paceOffset: (i - 2) * 3, // stagger: -6, -3, 0, +3, +6 steps different
+      jitterLat: 0,           // small lateral offset to avoid overlap
+      jitterLng: 0,
+    })
+    // Spread initial positions slightly
+    const st = mockCrewState.get(m.user_id)
+    st.jitterLat = (Math.random() - 0.5) * 0.00008
+    st.jitterLng = (Math.random() - 0.5) * 0.00008
+  })
+  nextTick(() => startRun())
+}
+
 async function locatePreview() {
   if (!previewMap) return
   try {
@@ -165,15 +231,24 @@ async function startRun() {
   const meetup = activity?.meetup_lat != null
     ? { lat: activity.meetup_lat, lng: activity.meetup_lng } : null
 
-  // Realtime crew broadcast
+  // Realtime crew broadcast (or demo mock)
   if (activity) {
-    try {
-      user.value = await api.getCurrentUser()
-      crewChannel = api.createRunChannel(activity.id)
-      api.onCrewPosition(crewChannel, ({ userId, lat, lng }) => {
-        updateCrewMarker(userId, lat, lng)
-      })
-    } catch { /* non-fatal */ }
+    if (crewDemo.value) {
+      user.value = { id: 'demo-you' }
+      crewMembers.value = [
+        { user_id: 'demo-you', user: { display_name: 'You' } },
+        ...MOCK_CREW,
+      ]
+      crewExpanded.value = true
+    } else {
+      try {
+        user.value = await api.getCurrentUser()
+        crewChannel = api.createRunChannel(activity.id)
+        api.onCrewPosition(crewChannel, ({ userId, lat, lng }) => {
+          updateCrewMarker(userId, lat, lng)
+        })
+      } catch { /* non-fatal */ }
+    }
   }
 
   // Create recorder
@@ -184,7 +259,7 @@ async function startRun() {
       radius: CHECK_IN_RADIUS_M,
       theme: 'dark',
       routeGeoJson: activity?.route_geojson || null,
-      onPositionUpdate: activity && crewChannel && user.value ? ({ lat, lng }) => {
+      onPositionUpdate: !crewDemo.value && activity && crewChannel && user.value ? ({ lat, lng }) => {
         if (!runPaused.value) {
           api.broadcastPosition(crewChannel, { userId: user.value.id, lat, lng })
         }
@@ -231,10 +306,36 @@ async function startRun() {
         switchToMock('No GPS fix after 12 s')
       }
     }
+
+    // Demo crew movement — every 2 seconds, advance each crew member along the route
+    if (crewDemo.value && runDurationS.value % 2 === 0 && demoRouteCoords) {
+      const map = recorder.value?.map
+      if (map) {
+        const maxIdx = demoRouteCoords.length - 1
+        mockCrewState.forEach((state, id) => {
+          // Advance along route: base 3 steps + pace offset
+          const advance = Math.max(1, 3 + state.paceOffset + Math.floor(Math.random() * 2))
+          state.routeIndex = Math.min(maxIdx, state.routeIndex + advance)
+          const pt = demoRouteCoords[state.routeIndex]
+          // Small jitter to avoid stacking, refresh each move
+          state.jitterLat += (Math.random() - 0.5) * 0.00003
+          state.jitterLng += (Math.random() - 0.5) * 0.00003
+          // Clamp jitter to ~3m
+          state.jitterLat = Math.max(-0.00003, Math.min(0.00003, state.jitterLat))
+          state.jitterLng = Math.max(-0.00003, Math.min(0.00003, state.jitterLng))
+          updateCrewMarker(id, pt[1] + state.jitterLat, pt[0] + state.jitterLng)
+        })
+      }
+    }
   }, 1000)
 
-  // Crew polling
-  if (activity) refreshCrew()
+  // Crew polling (skip in demo — members already set)
+  if (activity && !crewDemo.value) refreshCrew()
+}
+
+function getCrewMemberName(userId) {
+  const member = crewMembers.value.find(m => m.user_id === userId)
+  return member?.user?.display_name || 'Runner'
 }
 
 function updateCrewMarker(userId, lat, lng) {
@@ -242,10 +343,17 @@ function updateCrewMarker(userId, lat, lng) {
   if (!map) return
   let entry = crewMarkers.get(userId)
   if (!entry) {
+    const name = getCrewMemberName(userId)
     const marker = L.circleMarker([lat, lng], {
       radius: 7, weight: 2, color: '#fff',
       fillColor: '#3B82F6', fillOpacity: 1,
     }).addTo(map)
+    marker.bindTooltip(name, {
+      permanent: true,
+      direction: 'top',
+      offset: [0, -10],
+      className: 'crew-marker-label',
+    })
     entry = { marker, timeout: null }
     crewMarkers.set(userId, entry)
   } else {
@@ -284,6 +392,7 @@ function markLap() {
 async function stopRun() {
   if (timer) { clearInterval(timer); timer = null }
   if (crewRefreshInterval) { clearTimeout(crewRefreshInterval); crewRefreshInterval = null }
+  if (crewDemoInterval) { clearInterval(crewDemoInterval); crewDemoInterval = null }
   stopRecorder()
   if (crewChannel) { api.removeRunChannel(crewChannel); crewChannel = null }
   crewMarkers.forEach(entry => {
@@ -291,6 +400,9 @@ async function stopRun() {
     recorder.value?.map?.removeLayer(entry.marker)
   })
   crewMarkers.clear()
+  mockCrewState.clear()
+  demoRouteCoords = null
+  crewDemo.value = false
   exitFullscreen()
 
   const snap = {
@@ -328,12 +440,15 @@ onUnmounted(() => {
   exitFullscreen()
   if (timer) clearInterval(timer)
   if (crewRefreshInterval) clearTimeout(crewRefreshInterval)
+  if (crewDemoInterval) clearInterval(crewDemoInterval)
   if (previewMap) { previewMap.remove(); previewMap = null }
   if (crewChannel) api.removeRunChannel(crewChannel)
   crewMarkers.forEach(entry => {
     if (entry.timeout) clearTimeout(entry.timeout)
   })
   crewMarkers.clear()
+  mockCrewState.clear()
+  demoRouteCoords = null
   stopRecorder()
 })
 </script>
@@ -402,6 +517,10 @@ onUnmounted(() => {
         </div>
 
         <button class="big-start" @click="startRun" aria-label="Start run">START</button>
+
+        <button class="crew-demo-btn" @click="startCrewDemo" aria-label="Start crew run demo">
+          <i class="fa-solid fa-users"></i> Crew Run Demo
+        </button>
 
         <div class="status-strip">
           <span><i class="fa-solid fa-circle-dot ok"></i><span>{{ gpsStatus }}</span></span>

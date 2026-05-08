@@ -368,7 +368,10 @@ body.run-fullscreen .desktop-page-head { display: none !important; }
   border-radius: var(--r-lg); overflow: hidden;
   height: 180px;
   box-shadow: var(--shadow-md);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
 }
+.hero-feature:hover { transform: translateY(-1px); box-shadow: var(--shadow-lg); }
 .hero-feature .cover { position: absolute; inset: 0; background: center/cover no-repeat; }
 .hero-feature .overlay {
   position: absolute; inset: 0;
@@ -382,6 +385,20 @@ body.run-fullscreen .desktop-page-head { display: none !important; }
   font-family: var(--font-display);
 }
 .hero-feature .content .row { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; opacity: 0.95; }
+.hero-feature .hero-cta {
+  margin-top: 12px;
+  display: inline-flex; align-items: center; gap: 8px;
+  height: 36px; padding: 0 14px;
+  border: 0; border-radius: 999px;
+  background: rgba(255,255,255,0.96);
+  color: var(--ink-900);
+  font-size: 13px; font-weight: 700;
+  box-shadow: 0 8px 20px rgba(15,23,42,0.22);
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.hero-feature .hero-cta:hover { background: #fff; transform: translateY(-1px); }
+.hero-feature .hero-cta i { font-size: 12px; color: var(--brand-dark); }
 .hero-feature .club-pill {
   position: absolute; top: 12px; left: 12px;
   display: inline-flex; align-items: center; gap: 6px;
@@ -1724,15 +1741,23 @@ body.run-fullscreen .run-fullbleed {
 .run-fullbleed .end-btn {
   flex: 1; margin: 0 14px;
   height: 58px; border-radius: 29px;
-  background: var(--danger); color: #fff;
+  background:
+    linear-gradient(90deg, rgba(255,255,255,0.18) calc(var(--hold-progress, 0) * 100%), transparent 0),
+    var(--danger);
+  color: #fff;
   font-family: var(--font-display); font-weight: 700;
-  font-size: 22px; letter-spacing: 0.05em;
+  font-size: 18px; letter-spacing: 0.05em;
   border: 0; cursor: pointer;
   box-shadow: 0 10px 28px rgba(239,68,68,0.45);
-  transition: transform 0.15s ease;
+  transition: transform 0.15s ease, background 0.15s ease;
 }
 .run-fullbleed .end-btn:hover  { transform: translateY(-1px); }
 .run-fullbleed .end-btn:active { transform: scale(0.98); }
+.run-fullbleed .end-btn.holding {
+  background:
+    linear-gradient(90deg, rgba(255,255,255,0.24) calc(var(--hold-progress, 0) * 100%), transparent 0),
+    #dc2626;
+}
 
 /* Resilience hint above the rec-panel */
 .run-fullbleed .resilience-hint {

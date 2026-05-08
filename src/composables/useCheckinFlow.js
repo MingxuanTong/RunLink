@@ -62,7 +62,7 @@ export function useCheckinFlow() {
       title: "Confirm you're at the meetup",
       message: `We couldn't verify the 50 m geofence. Tap confirm to do a manual check-in.`,
       confirmText: "I'm at the meetup",
-      danger: true,
+      danger: false,
     })
 
     if (confirmed) {

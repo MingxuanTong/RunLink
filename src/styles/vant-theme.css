@@ -18,6 +18,15 @@
   --van-toast-border-radius: 10px;
   --van-toast-default-width: auto;
   --van-toast-default-min-width: 200px;
+
+  /* Vant dialog */
+  --van-dialog-border-radius: 22px;
+  --van-dialog-font-family: 'Barlow', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --van-dialog-font-size: 15px;
+  --van-dialog-title-font-size: 20px;
+  --van-dialog-message-font-size: 14px;
+  --van-dialog-has-title-message-padding-top: 16px;
+  --van-button-default-font-family: 'Barlow', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
 }
 
 /* Vant toast — match app.css .toast design */
@@ -34,6 +43,54 @@
 
 .van-toast--text.van-toast--text {
   min-width: 200px;
+}
+
+/* Vant dialog — match app.css modal / .btn design, force viewport centering */
+.van-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+}
+
+.van-dialog {
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.12), 0 8px 16px rgba(15, 23, 42, 0.06);
+  overflow: hidden;
+}
+
+.van-dialog__header {
+  font-family: 'Barlow', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-weight: 700;
+  padding-top: 24px;
+  padding-bottom: 4px;
+}
+
+.van-dialog__message {
+  font-family: 'Barlow', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  line-height: 1.6;
+}
+
+.van-dialog__footer {
+  padding-bottom: 8px;
+}
+
+.van-dialog__confirm,
+.van-dialog__cancel {
+  font-family: 'Barlow', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  height: 44px;
+  border-radius: 14px;
+}
+
+.van-dialog__confirm {
+  color: #F97316;
+}
+
+.van-dialog__cancel {
+  color: #64748B;
 }
 
 /* Color-coded left border by kind */

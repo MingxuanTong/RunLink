@@ -2,7 +2,11 @@
 import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { showToast } from 'vant'
+import { useToast } from '@/composables/useToast'
+import { useModal } from '@/composables/useModal'
+
+const { toast } = useToast()
+const { confirm } = useModal()
 
 const router = useRouter()
 const route = useRoute()
@@ -37,8 +41,9 @@ function navigateTo(path) {
 }
 
 async function handleLogout() {
+  if (!await confirm({ title: 'Log out of RunLink?', message: 'You can sign back in anytime.', confirmText: 'Log out', danger: true })) return
   await auth.signOut()
-  showToast('Logged out')
+  toast('Logged out')
 }
 </script>
 

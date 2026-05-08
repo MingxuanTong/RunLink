@@ -693,33 +693,6 @@ button.chip:focus-visible,
   to   { opacity: 1; transform: translateY(0); }
 }
 
-.modal-root {
-  position: fixed; inset: 0; z-index: 600;
-  background: rgba(15, 23, 42, 0.5);
-  backdrop-filter: blur(4px);
-  display: flex; align-items: flex-end; justify-content: center;
-  padding: 0;
-}
-.modal-root[hidden] { display: none; }
-.modal {
-  width: 100%; max-width: 520px;
-  background: #fff;
-  border-radius: var(--r-xl) var(--r-xl) 0 0;
-  padding: 22px 22px 28px;
-  box-shadow: var(--shadow-lg);
-  animation: modal-in 0.22s ease;
-  max-height: 80dvh; overflow: auto;
-}
-@keyframes modal-in {
-  from { opacity: 0; transform: translateY(24px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-.modal h3 {
-  margin: 0 0 6px; font-family: var(--font-display);
-  font-size: 22px; color: var(--ink-900); letter-spacing: -0.01em;
-}
-.modal p { margin: 0 0 14px; color: var(--ink-500); font-size: 13.5px; line-height: 1.6; }
-.modal .actions { display: flex; gap: 8px; justify-content: flex-end; }
 
 /* =====================================================================
    AUTH
@@ -967,8 +940,7 @@ button.chip:focus-visible,
 
   .stat-grid { grid-template-columns: repeat(4, 1fr); }
 
-  .modal-root { align-items: center; padding: 12px; }
-  .modal { border-radius: var(--r-xl); max-height: 90dvh; }
+
 }
 
 @media (min-width: 1280px) {

@@ -5,10 +5,10 @@ export function useToast() {
     toast(message, { kind = 'info', duration } = {}) {
       const opts = duration ? { duration } : {}
       switch (kind) {
-        case 'success': return showSuccessToast(message)
-        case 'error':   return showFailToast(message)
-        case 'warn':    return showToast({ message, icon: 'warning', ...opts })
-        default:        return showToast({ message, icon: 'info', ...opts })
+        case 'success': return showSuccessToast({ message, className: 'toast--success', ...opts })
+        case 'error':   return showFailToast({ message, className: 'toast--error', ...opts })
+        case 'warn':    return showToast({ message, icon: 'warning', className: 'toast--warn', ...opts })
+        default:        return showToast({ message, icon: 'info', className: 'toast--info', ...opts })
       }
     },
     showSuccess: showSuccessToast,

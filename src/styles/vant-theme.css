@@ -12,4 +12,32 @@
   --van-background-2: #FFFFFF;
   --van-font-family: 'Barlow', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   --van-toast-z-index: 9000;
+  --van-toast-background: #FFFFFF;
+  --van-toast-text-color: #0F172A;
+  --van-toast-font-size: 13px;
+  --van-toast-border-radius: 10px;
+  --van-toast-default-width: auto;
+  --van-toast-default-min-width: 200px;
 }
+
+/* Vant toast — match app.css .toast design */
+.van-toast {
+  font-family: 'Barlow', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-weight: 600;
+  border: 1px solid #F1F5F9;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08), 0 2px 4px rgba(15, 23, 42, 0.04);
+}
+
+.van-toast--text {
+  padding: 10px 14px;
+}
+
+.van-toast--text.van-toast--text {
+  min-width: 200px;
+}
+
+/* Color-coded left border by kind */
+.toast--success { border-left: 3px solid #22C55E !important; }
+.toast--error   { border-left: 3px solid #EF4444 !important; }
+.toast--warn    { border-left: 3px solid #F59E0B !important; }
+.toast--info    { border-left: 3px solid #0EA5E9 !important; }

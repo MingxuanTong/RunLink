@@ -34,11 +34,16 @@ const runDurationS = ref(0)
 const runDistanceM = ref(0)
 const runPaused = ref(false)
 const useMock = ref(false)
+const endHoldMs = 1200
+const endHoldProgress = ref(0)
+const endHoldActive = ref(false)
 const gpsStatus = ref('Locating…')
 
 const { recorder, createRecorder, start: startGPS, stop: stopRecorder, recenter, zoomIn, zoomOut, simulateStep, getDistanceMeters, getPoints, getPolyline } = useRunRecorder()
 
 let timer = null
+let endHoldTimer = null
+let endHoldInterval = null
 let crewChannel = null
 let crewMarkers = new Map()
 const crewMembers = ref([])
@@ -389,7 +394,42 @@ function markLap() {
   toast(`Lap @ ${fmtDistance(runDistanceM.value)}`, { kind: 'info' })
 }
 
+function resetEndHold() {
+  endHoldActive.value = false
+  endHoldProgress.value = 0
+  if (endHoldTimer) {
+    clearTimeout(endHoldTimer)
+    endHoldTimer = null
+  }
+  if (endHoldInterval) {
+    clearInterval(endHoldInterval)
+    endHoldInterval = null
+  }
+}
+
+function startEndHold() {
+  if (endHoldActive.value) return
+  endHoldActive.value = true
+  endHoldProgress.value = 0
+  const startedAt = Date.now()
+
+  endHoldInterval = setInterval(() => {
+    endHoldProgress.value = Math.min((Date.now() - startedAt) / endHoldMs, 1)
+  }, 16)
+
+  endHoldTimer = setTimeout(async () => {
+    resetEndHold()
+    await stopRun()
+  }, endHoldMs)
+}
+
+function cancelEndHold() {
+  if (!endHoldActive.value) return
+  resetEndHold()
+}
+
 async function stopRun() {
+  resetEndHold()
   if (timer) { clearInterval(timer); timer = null }
   if (crewRefreshInterval) { clearTimeout(crewRefreshInterval); crewRefreshInterval = null }
   if (crewDemoInterval) { clearInterval(crewDemoInterval); crewDemoInterval = null }
@@ -437,6 +477,7 @@ async function stopRun() {
 
 onMounted(loadPreview)
 onUnmounted(() => {
+  resetEndHold()
   exitFullscreen()
   if (timer) clearInterval(timer)
   if (crewRefreshInterval) clearTimeout(crewRefreshInterval)
@@ -625,7 +666,19 @@ onUnmounted(() => {
           <button class="ctrl-btn" @click="togglePause" :aria-label="runPaused ? 'Resume' : 'Pause'" :title="runPaused ? 'Resume' : 'Pause'">
             <i :class="`fa-solid fa-${runPaused ? 'play' : 'pause'}`"></i>
           </button>
-          <button class="end-btn" @click="stopRun" aria-label="Finish and save the run">END</button>
+          <button
+            class="end-btn"
+            :class="{ holding: endHoldActive }"
+            :style="{ '--hold-progress': endHoldProgress }"
+            type="button"
+            aria-label="Hold to finish and save the run"
+            @pointerdown="startEndHold"
+            @pointerup="cancelEndHold"
+            @pointerleave="cancelEndHold"
+            @pointercancel="cancelEndHold"
+          >
+            {{ endHoldActive ? 'HOLD...' : 'HOLD TO END' }}
+          </button>
           <button class="ctrl-btn" @click="markLap" aria-label="Mark a lap" title="Mark a lap">
             <i class="fa-solid fa-flag"></i>
           </button>

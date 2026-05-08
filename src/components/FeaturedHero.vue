@@ -39,6 +39,10 @@ function open() {
         <span v-if="a.meetup_name">·</span>
         <span v-if="a.meetup_name"><i class="fa-solid fa-location-dot"></i> {{ a.meetup_name }}</span>
       </div>
+      <button class="hero-cta" type="button" @click.stop="open">
+        View activity
+        <i class="fa-solid fa-arrow-right"></i>
+      </button>
     </div>
   </div>
 </template>

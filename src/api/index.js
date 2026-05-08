@@ -9,11 +9,21 @@ import { supabase } from '@/lib/supabase'
 /* =========================================================== Auth */
 
 export async function signUp({ email, password, displayName }) {
+  const normalizedEmail = email.trim().toLowerCase()
+  const normalizedDisplayName = displayName?.trim()
   const { data, error } = await supabase.auth.signUp({
-    email, password,
-    options: { data: { display_name: displayName || email.split('@')[0] } },
+    email: normalizedEmail,
+    password,
+    options: {
+      data: {
+        display_name: normalizedDisplayName || normalizedEmail.split('@')[0],
+      },
+    },
   })
   if (error) throw error
+  if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+    throw new Error('This email is already registered. Try signing in instead.')
+  }
   return data
 }
 

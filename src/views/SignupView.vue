@@ -1,23 +1,60 @@
 <script setup>
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import * as api from '@/api'
 import { useToast } from '@/composables/useToast'
 
+const router = useRouter()
 const { toast } = useToast()
 
 const displayName = ref('')
 const email = ref('')
 const password = ref('')
 const loading = ref(false)
+const feedback = ref('')
+const feedbackKind = ref('info')
 
 async function handleSignup() {
-  if (!email.value || !password.value) return toast('Fill in all fields', { kind: 'warn' })
-  if (password.value.length < 6) return toast('Password must be at least 6 characters', { kind: 'warn' })
+  feedback.value = ''
+
+  if (!email.value || !password.value) {
+    feedbackKind.value = 'warn'
+    feedback.value = 'Fill in all fields.'
+    return toast('Fill in all fields', { kind: 'warn' })
+  }
+  if (password.value.length < 6) {
+    feedbackKind.value = 'warn'
+    feedback.value = 'Password must be at least 6 characters.'
+    return toast('Password must be at least 6 characters', { kind: 'warn' })
+  }
+
   loading.value = true
   try {
-    await api.signUp({ email: email.value, password: password.value, displayName: displayName.value })
-    toast('Account created! Check your email for verification.', { kind: 'success' })
+    const result = await api.signUp({
+      email: email.value,
+      password: password.value,
+      displayName: displayName.value,
+    })
+
+    password.value = ''
+
+    if (result.session) {
+      feedbackKind.value = 'success'
+      feedback.value = 'Account created. Redirecting you now...'
+      toast('Account created! You are now signed in.', { kind: 'success' })
+      router.replace('/discover')
+      return
+    }
+
+    feedbackKind.value = 'success'
+    feedback.value = 'Account created. Verify your email, then sign in.'
+    toast('Account created! Verify your email, then sign in.', { kind: 'success' })
+    router.replace('/login')
   } catch (err) {
+    feedbackKind.value = 'error'
+    feedback.value = err?.message === 'email rate limit exceeded'
+      ? 'Too many signup emails were sent recently. Please wait a bit, or disable email confirmation in Supabase and try again.'
+      : (err.message || 'Could not create account.')
     toast(err.message, { kind: 'error' })
   } finally {
     loading.value = false
@@ -44,12 +81,28 @@ async function handleSignup() {
         <input v-model="password" type="password" placeholder="Min 6 characters" required minlength="6" />
       </div>
       <button class="btn block" type="submit" :disabled="loading">
-        {{ loading ? 'Creating account…' : 'Create account' }}
+        {{ loading ? 'Creating account...' : 'Create account' }}
       </button>
     </form>
+
+    <p v-if="feedback" class="auth-feedback" :class="`is-${feedbackKind}`">
+      {{ feedback }}
+    </p>
 
     <p class="auth-switch">
       Already have an account? <router-link to="/login">Sign in</router-link>
     </p>
   </div>
 </template>
+
+<style scoped>
+.auth-feedback {
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.auth-feedback.is-success { color: #15803d; }
+.auth-feedback.is-warn { color: #b45309; }
+.auth-feedback.is-error { color: #b91c1c; }
+</style>

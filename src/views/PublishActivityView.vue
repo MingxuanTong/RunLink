@@ -142,8 +142,8 @@ async function handlePublish() {
       checkin_window_start: cs ? cs.toISOString() : null,
       checkin_window_end: ce ? ce.toISOString() : null,
       meetup_name: meetupName.value.trim() || null,
-      meetup_lat: picker.value?.lat,
-      meetup_lng: picker.value?.lng,
+      meetup_lat: picker.value?.getLatLng()?.lat,
+      meetup_lng: picker.value?.getLatLng()?.lng,
       geofence_m: CHECK_IN_RADIUS_M,
       total_cap: totalCap.value ? Number(totalCap.value) : null,
       route_file_url: routeAsset?.publicUrl || null,
@@ -183,7 +183,7 @@ onMounted(async () => {
     <template v-else-if="club">
       <div class="card"><b>{{ club.name }}</b> · timezone <span class="chip ghost">{{ club.timezone }}</span></div>
 
-      <form class="card" style="margin-top:12px" @submit.prevent="handlePublish">
+      <div class="card" style="margin-top:12px">
         <div class="field">
           <label>Title</label>
           <input v-model="title" required maxlength="80" placeholder="Sunset Bund 5K" />
@@ -269,8 +269,8 @@ onMounted(async () => {
           <div class="hint">Each group has a pace / goal. Optional per-group capacity.</div>
         </div>
 
-        <button class="btn block" type="submit"><i class="fa-solid fa-bullhorn"></i> Publish</button>
-      </form>
+        <button class="btn block" type="button" @click="handlePublish"><i class="fa-solid fa-bullhorn"></i> Publish</button>
+      </div>
     </template>
 
     <div v-else class="empty"><h3>Club not found</h3></div>

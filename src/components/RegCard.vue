@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { fmtTime } from '@/utils/formatters'
 import { useCheckinFlow } from '@/composables/useCheckinFlow'
 import { useModal } from '@/composables/useModal'
+import CheckinRangeModal from './CheckinRangeModal.vue'
 import { useToast } from '@/composables/useToast'
 import * as api from '@/api'
 import Avatar from './Avatar.vue'
@@ -14,7 +15,12 @@ const props = defineProps({
 
 const emit = defineEmits(['refresh'])
 const router = useRouter()
-const { startCheckin } = useCheckinFlow()
+const {
+  startCheckin,
+  showModal, distance, radius, accuracy, failReason, meetupName, activity: checkinActivity, checkingIn,
+  handleRetry, handleManualCheckin, closeRangeModal, setOnCheckedIn,
+} = useCheckinFlow()
+setOnCheckedIn(() => emit('refresh'))
 const { confirm } = useModal()
 const { toast } = useToast()
 
@@ -43,8 +49,8 @@ const minsUntilOpen = computed(() => {
 
 async function handleCheckin() {
   const act = await api.getActivity(a.value.id)
-  await startCheckin(act)
-  emit('refresh')
+  const result = await startCheckin(act)
+  if (!result?.modal) emit('refresh')
 }
 
 async function handleCancel() {
@@ -103,5 +109,19 @@ async function handleCancel() {
       </button>
       <button class="btn ghost sm block" @click="router.push(`/activity/${a.id}`)">View detail</button>
     </div>
+
+    <CheckinRangeModal
+      :show="showModal"
+      :distance="distance"
+      :radius="radius"
+      :accuracy="accuracy"
+      :reason="failReason"
+      :meetup-name="meetupName"
+      :activity="checkinActivity"
+      :checking-in="checkingIn"
+      @close="closeRangeModal"
+      @retry="handleRetry"
+      @manual-checkin="handleManualCheckin"
+    />
   </div>
 </template>

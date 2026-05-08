@@ -5,6 +5,7 @@ import * as api from '@/api'
 import { useToast } from '@/composables/useToast'
 import { useModal } from '@/composables/useModal'
 import { useCheckinFlow } from '@/composables/useCheckinFlow'
+import CheckinRangeModal from '@/components/CheckinRangeModal.vue'
 import { fmtDate, fmtTime, fmtDistance, fmtPace } from '@/utils/formatters'
 import { esc } from '@/utils/helpers'
 import { CHECK_IN_RADIUS_M, EMOJI_PRESET } from '@/utils/shared-helpers'
@@ -16,7 +17,12 @@ const route = useRoute()
 const router = useRouter()
 const { toast } = useToast()
 const { confirm } = useModal()
-const { runCheckinFlow } = useCheckinFlow()
+const {
+  runCheckinFlow,
+  showModal, distance, radius, accuracy, failReason, meetupName, checkingIn,
+  handleRetry, handleManualCheckin, closeRangeModal, setOnCheckedIn,
+} = useCheckinFlow()
+setOnCheckedIn(loadData)
 
 const loading = ref(true)
 const activity = ref(null)
@@ -187,9 +193,10 @@ async function handleCancelActivity() {
 }
 
 async function handleCheckin() {
-  await runCheckinFlow(activity.value)
-  await loadData()
+  const result = await runCheckinFlow(activity.value)
+  if (!result?.modal) await loadData()
 }
+
 
 async function toggleEmoji(emoji) {
   if (!canPostReflection.value) return
@@ -402,6 +409,20 @@ onUnmounted(() => {
           <button class="btn ghost" @click="handleCancelActivity"><i class="fa-solid fa-ban"></i> Cancel activity</button>
         </div>
       </template>
+
+      <CheckinRangeModal
+        :show="showModal"
+        :distance="distance"
+        :radius="radius"
+        :accuracy="accuracy"
+        :reason="failReason"
+        :meetup-name="meetupName"
+        :activity="activity"
+        :checking-in="checkingIn"
+        @close="closeRangeModal"
+        @retry="handleRetry"
+        @manual-checkin="handleManualCheckin"
+      />
     </template>
 
     <div v-else class="empty">

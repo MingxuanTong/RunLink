@@ -693,6 +693,97 @@ button.chip:focus-visible,
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* Check-in range modal */
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 600;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.checkin-modal {
+  background: #fff; border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  width: 100%; max-width: 360px;
+  padding: 28px 24px 24px;
+  position: relative;
+}
+.modal-close {
+  position: absolute; top: 12px; right: 12px;
+  background: none; border: none; color: var(--ink-400);
+  width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: 16px;
+  transition: background 0.15s, color 0.15s;
+}
+.modal-close:hover { background: var(--ink-100); color: var(--ink-700); }
+
+.modal-header { text-align: center; margin-bottom: 20px; }
+.modal-header h3 {
+  font-family: var(--font-display); font-weight: 700;
+  font-size: 22px; color: var(--ink-900); margin: 10px 0 4px;
+}
+.modal-header .modal-sub {
+  font-size: 13.5px; color: var(--ink-500); margin: 0;
+}
+.modal-icon {
+  width: 56px; height: 56px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 22px;
+}
+.modal-icon.far  { background: #FEE2E2; color: var(--danger); }
+.modal-icon.mid  { background: #FEF3C7; color: var(--warn); }
+.modal-icon.close { background: var(--accent-soft); color: var(--accent); }
+
+.modal-distance { text-align: center; margin-bottom: 16px; }
+.distance-value {
+  font-family: var(--font-display); font-weight: 700;
+  font-size: 40px; line-height: 1; font-variant-numeric: tabular-nums;
+}
+.distance-value.far   { color: var(--danger); }
+.distance-value.mid   { color: var(--warn); }
+.distance-value.close { color: var(--accent); }
+.distance-label {
+  font-size: 13px; color: var(--ink-500); margin-top: 4px;
+}
+.progress-bar {
+  height: 6px; background: var(--ink-100); border-radius: 3px;
+  margin: 14px 0 6px; overflow: hidden;
+}
+.progress-fill {
+  height: 100%; border-radius: 3px;
+  transition: width 0.6s ease;
+}
+.progress-fill.far   { background: var(--danger); }
+.progress-fill.mid   { background: var(--warn); }
+.progress-fill.close { background: var(--accent); }
+.progress-labels {
+  display: flex; justify-content: space-between;
+  font-size: 11px; color: var(--ink-400);
+}
+
+.modal-info {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--ink-50); border-radius: var(--r-sm);
+  padding: 10px 12px; margin-bottom: 16px;
+  font-size: 12.5px; color: var(--ink-700);
+}
+.modal-info.warn { background: #FEF3C7; color: #92400E; }
+
+.modal-actions {
+  display: flex; flex-direction: column; gap: 8px;
+}
+
+/* Modal transition */
+.modal-enter-active { transition: opacity 0.2s ease; }
+.modal-enter-active .checkin-modal { transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s ease; }
+.modal-leave-active { transition: opacity 0.15s ease; }
+.modal-leave-active .checkin-modal { transition: transform 0.15s ease, opacity 0.15s ease; }
+.modal-enter-from { opacity: 0; }
+.modal-enter-from .checkin-modal { opacity: 0; transform: translateY(20px) scale(0.95); }
+.modal-leave-to { opacity: 0; }
+.modal-leave-to .checkin-modal { opacity: 0; transform: translateY(10px) scale(0.98); }
+
 
 /* =====================================================================
    AUTH

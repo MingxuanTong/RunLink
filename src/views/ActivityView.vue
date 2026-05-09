@@ -271,6 +271,10 @@ onUnmounted(() => {
               Check-in radius <b>{{ CHECK_IN_RADIUS_M }} m</b>
               <template v-if="activity.checkin_window_start"> · window {{ fmtTime(activity.checkin_window_start) }} → {{ fmtTime(activity.checkin_window_end || activity.start_at) }}</template>
             </div>
+            <div style="margin-top:8px;color:var(--ink-500);font-size:12px;line-height:1.5">
+              <i class="fa-solid fa-shield-halved" style="color:var(--brand)"></i>
+              Your location is used only to verify attendance within the meetup radius.
+            </div>
             <div id="meetup-preview" class="leaflet-map" style="margin-top:10px;height:180px"></div>
             <template v-if="registered && !isPast">
               <div v-if="isCheckedIn" class="chip success" style="margin-top:10px;display:inline-flex">
@@ -322,6 +326,14 @@ onUnmounted(() => {
                 <span style="color:var(--ink-500);font-size:13px">Check in on Discover → My registrations to react and post a reflection.</span>
               </div>
               <template v-if="canPostReflection">
+                <div class="card card-compact" style="margin-top:10px;background:var(--ink-50);border-color:var(--ink-100)">
+                  <div style="font-weight:700;color:var(--ink-900);font-size:12px;margin-bottom:4px">
+                    <i class="fa-solid fa-shield-halved" style="color:var(--brand)"></i> Privacy note
+                  </div>
+                  <div style="color:var(--ink-500);font-size:12px;line-height:1.5">
+                    Reflections are visible only within this club activity, so runners here can look back on the shared run together.
+                  </div>
+                </div>
                 <div class="field" style="margin-top:10px;margin-bottom:8px">
                   <label>Share how it felt (optional, ≤ 200 chars)</label>
                   <textarea v-model="reflNote" maxlength="200" placeholder="Pace, weather, the post-run coffee…" @input="reflCountLive = reflNote.length"></textarea>

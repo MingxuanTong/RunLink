@@ -71,6 +71,12 @@ const routes = [
     props: true,
   },
   {
+    path: '/club/:clubId/publish/preview',
+    component: () => import('@/views/PublishActivityPreviewView.vue'),
+    meta: { auth: true, shell: 'default' },
+    props: true,
+  },
+  {
     path: '/club/:clubId/publish',
     component: () => import('@/views/PublishActivityView.vue'),
     meta: { auth: true, shell: 'default' },

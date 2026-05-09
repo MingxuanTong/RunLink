@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { fmtTime } from '@/utils/formatters'
 import { useCheckinFlow } from '@/composables/useCheckinFlow'
@@ -92,6 +92,15 @@ async function handleCancel() {
     <div v-if="windowOpen" class="checkin-hint">
       <i class="fa-solid fa-circle-dot"></i>
       Check-in open · {{ fmtTime(a.checkin_window_start) }} → {{ fmtTime(a.checkin_window_end) }} · auto-verifies your location in one tap
+    </div>
+
+    <div class="card card-compact" style="margin-top:10px;background:var(--ink-50);border-color:var(--ink-100)">
+      <div style="font-weight:700;color:var(--ink-900);font-size:12px;margin-bottom:4px">
+        <i class="fa-solid fa-shield-halved" style="color:var(--brand)"></i> Privacy note
+      </div>
+      <div style="color:var(--ink-500);font-size:12px;line-height:1.5">
+        Your location is used only to verify check-in near the meetup point. It is not posted publicly from this check-in action.
+      </div>
     </div>
 
     <div class="actions">

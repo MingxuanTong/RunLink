@@ -8,6 +8,7 @@ import { parseRouteFile, MAX_UPLOAD_BYTES, CHECK_IN_RADIUS_M } from '@/utils/sha
 import { getCurrentPosition } from '@/utils/geofence'
 import { addRouteGeoJson } from '@/utils/map'
 import { esc } from '@/utils/helpers'
+import { getPublishDraft, setPublishDraft } from '@/utils/publishDraft'
 import Avatar from '@/components/Avatar.vue'
 
 const route = useRoute()
@@ -50,6 +51,29 @@ function addGroup() {
 }
 function removeGroup(i) {
   groupRows.value.splice(i, 1)
+}
+
+function hydrateFromDraft(draft) {
+  if (!draft || draft.clubId !== clubId) return
+  title.value = draft.title || ''
+  description.value = draft.description || ''
+  startAt.value = draft.startAtIso ? draft.startAtIso.slice(0, 16) : ''
+  endAt.value = draft.endAtIso ? draft.endAtIso.slice(0, 16) : ''
+  checkinStart.value = draft.checkinStartIso ? draft.checkinStartIso.slice(0, 16) : ''
+  checkinEnd.value = draft.checkinEndIso ? draft.checkinEndIso.slice(0, 16) : ''
+  meetupName.value = draft.meetupName || ''
+  totalCap.value = draft.totalCap != null ? String(draft.totalCap) : ''
+  groupRows.value = draft.groups?.length
+    ? draft.groups.map((g) => ({ name: g.name || '', cap: g.cap != null ? String(g.cap) : '' }))
+    : [{ name: '5K Chill', cap: '' }, { name: '5K Push', cap: '' }]
+  coverPreview.value = draft.coverPreview || ''
+  routePreview.value = draft.routePreview || ''
+  routePreviewFileName.value = draft.routePreviewFileName || ''
+  routeUpload = draft.routeUpload || null
+  if (draft.meetup?.lat != null && draft.meetup?.lng != null) {
+    meetupSelected.value = true
+    nextTick(() => setLatLng(draft.meetup))
+  }
 }
 
 function onCoverChange(e) {
@@ -108,7 +132,7 @@ async function useMyLocation() {
   }
 }
 
-async function handlePublish() {
+async function handlePreview() {
   const s = startAt.value ? new Date(startAt.value) : null
   const e = endAt.value ? new Date(endAt.value) : null
   const cs = checkinStart.value ? new Date(checkinStart.value) : null
@@ -128,40 +152,34 @@ async function handlePublish() {
     .map(g => ({ name: g.name.trim(), cap: g.cap ? Number(g.cap) : null }))
     .filter(g => g.name)
 
-  try {
-    const coverUpload = coverFile ? await api.uploadActivityAsset(coverFile, { folder: 'covers' }) : null
-    const routeAsset = routeUpload?.file ? await api.uploadActivityAsset(routeUpload.file, { folder: 'routes' }) : null
-
-    const a = await api.createActivity({
-      club_id: clubId,
-      title: title.value.trim(),
-      description: description.value.trim() || null,
-      cover_url: coverUpload?.publicUrl || null,
-      start_at: s.toISOString(),
-      end_at: e.toISOString(),
-      checkin_window_start: cs ? cs.toISOString() : null,
-      checkin_window_end: ce ? ce.toISOString() : null,
-      meetup_name: meetupName.value.trim() || null,
-      meetup_lat: picker.value?.getLatLng()?.lat,
-      meetup_lng: picker.value?.getLatLng()?.lng,
-      geofence_m: CHECK_IN_RADIUS_M,
-      total_cap: totalCap.value ? Number(totalCap.value) : null,
-      route_file_url: routeAsset?.publicUrl || null,
-      route_file_name: routeAsset?.name || null,
-      route_file_kind: routeUpload?.kind || null,
-      route_geojson: routeUpload?.geojson || null,
-      groups,
-      status: 'published',
-    })
-    toast('Activity published!', { kind: 'success' })
-    router.push(`/activity/${a.id}`)
-  } catch (err) { toast(err.message, { kind: 'error' }) }
+  const meetup = picker.value?.getLatLng()
+  setPublishDraft({
+    clubId,
+    club: club.value,
+    title: title.value.trim(),
+    description: description.value.trim(),
+    startAtIso: s.toISOString(),
+    endAtIso: e.toISOString(),
+    checkinStartIso: cs ? cs.toISOString() : null,
+    checkinEndIso: ce ? ce.toISOString() : null,
+    meetupName: meetupName.value.trim(),
+    meetup: { lat: meetup?.lat, lng: meetup?.lng },
+    totalCap: totalCap.value ? Number(totalCap.value) : null,
+    groups,
+    coverFile,
+    coverPreview: coverPreview.value || '',
+    routeUpload,
+    routePreview: routePreview.value || '',
+    routePreviewFileName: routePreviewFileName.value || '',
+  })
+  router.push(`/club/${clubId}/publish/preview`)
 }
 
 onMounted(async () => {
   try {
     club.value = await api.getClub(clubId)
   } finally { loading.value = false }
+  hydrateFromDraft(getPublishDraft())
   nextTick(() => {
     const el = document.getElementById('meetup-map')
     if (el) {
@@ -169,6 +187,10 @@ onMounted(async () => {
         radius: CHECK_IN_RADIUS_M,
         onChange: ({ lat, lng }) => { meetupSelected.value = true },
       })
+      const draft = getPublishDraft()
+      if (draft?.clubId === clubId && draft.meetup?.lat != null && draft.meetup?.lng != null) {
+        nextTick(() => setLatLng(draft.meetup))
+      }
     }
   })
 })
@@ -269,7 +291,7 @@ onMounted(async () => {
           <div class="hint">Each group has a pace / goal. Optional per-group capacity.</div>
         </div>
 
-        <button class="btn block" type="button" @click="handlePublish"><i class="fa-solid fa-bullhorn"></i> Publish</button>
+        <button class="btn block" type="button" @click="handlePreview"><i class="fa-regular fa-eye"></i> Preview before publish</button>
       </div>
     </template>
 

@@ -85,6 +85,11 @@ const progressPercent = computed(() => {
             <span>{{ accuracy != null ? 'Location unavailable' : 'GPS signal lost' }} — try moving to an open area</span>
           </div>
 
+          <div class="modal-info">
+            <i class="fa-solid fa-shield-halved"></i>
+            <span>Your location is used only to verify attendance for this activity.</span>
+          </div>
+
           <div class="modal-actions">
             <button class="btn ghost block" :disabled="checkingIn" @click="emit('retry')">
               <i :class="checkingIn ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-rotate'"></i>
